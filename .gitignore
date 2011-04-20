@@ -1,0 +1,5 @@
+# vim: fileencoding=utf-8:
+*.gem
+.bundle
+Gemfile.lock
+pkg/*
