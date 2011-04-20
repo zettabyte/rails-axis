@@ -37,16 +37,15 @@ module Axis
     def initialize(model)
       @entries  = [] # the index acts as an entry's "id"; first one must be root
       @entries << Entry.new(model)
-      @root     = @entries.first
     end
 
-    attr_reader :root
-
-    private
+    #
+    # Control how and what data gets stored when instances are marshaled
+    #
     def marshal_load(data)
       @entries = data
     end
-    def mashal_dump
+    def marshal_dump
       @entries
     end
 
