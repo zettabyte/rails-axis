@@ -9,7 +9,9 @@ module Axis
       def axis_on(*args)
         settings = axis_settings
         options  = process_axis_options(args.extract_options!)
-        args.flatten.each { |action| settings[action.to_s] = options }
+        args     = args.flatten.map { |a| a.blank? ? nil : a.to_s }.compact.uniq
+        args    << "index" if args.empty?
+        args.each { |a| settings[a] = options }
       end
 
       private
@@ -77,7 +79,7 @@ module Axis
         else
           raise ArgumentError, "invalid type for :scope option: #{options[:scope].class.name}"
         end
-        unless settings[:model].responds_to?(settings[:scope])
+        unless settings[:model].respond_to?(settings[:scope])
           raise ArgumentError, "invalid value for :scope option: #{settings[:scope]} " +
             "(model class #{settings[:model].name} has no such :scope or class method)"
         end
