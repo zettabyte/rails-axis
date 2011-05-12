@@ -32,7 +32,7 @@ Gem::Specification.new do |s|
   s.executables   = `git ls-files -- bin/*`.split("\n").map{ |f| File.basename(f) }
   s.require_paths = ["lib"]
 
-  s.add_dependency "rails",         "~> 3.0.7"
-  s.add_dependency "active_record", "~> 3.0.7"
-  s.add_dependency "meta_where",    "~> 1.0.4"
+  s.add_dependency "rails",        "~> 3.0.7"
+  s.add_dependency "activerecord", "~> 3.0.7"
+  s.add_dependency "meta_where",   "~> 1.0.4"
 end
