@@ -91,6 +91,70 @@ module Axis
       :bool      => :boolean   # alias
     }.freeze
 
+    class << self
+
+      def [](model, name = nil)
+        result = attributes[model]
+        if name
+          # model plus name lookup either gives you a reference to the
+          # associated attribute or nil...
+          result[name]
+        else
+          # model-only variation never gives you original hash, but always gives
+          # you *a* hash...
+          result ? result.dup : {}
+        end
+      end
+
+      #
+      # Finds or creates a new attribute using the same method signature as the
+      # model helper #axis_search_on (with an additional leading parameter for
+      # the model class). If an existing attribute is found, it is updated
+      # according to the requested search settings.
+      #
+      def searchable(model, *args, &block)
+        raise ArgumentError, "invalid model type: #{model.class}" unless model.is_a?(Class)
+        raise ArgumentError, "invalid model: #{model.name}" unless model.ancestors.include?(ActiveRecord::Base)
+        options = args.extract_options!
+        attrs   = args.flatten.map do |attr|
+          attr  = attr.is_a?(Symbol) : attr.to_s : attr
+          raise ArgumentError, "invalid attribute type: #{attr.class}" unless attr.is_a?(String)
+          raise ArgumentError, "invalid attribute: #{attr}" unless model.column_names.include?(attr)
+          attr
+        end
+        raise ArgumentError, "no attributes provided" if attrs.empty?
+        raise ArgumentError, "some attributes specified multiple times" if (attrs.uniq.length < attrs.length).empty?
+
+        type = options.delete(:type)
+        name = options.delete(:name)
+        options[:filter]
+        options[:not]
+        options[:null]
+        options[:blank]
+        options[:empty]
+        options[:multi]
+        options[:false]
+        options[:values]
+        new(type, model, name, "Unset Caption", attrs, nil, nil, block)
+
+      end
+
+      def for(model, name)
+        # Validate name's type so if callers pass nil for it, it doesn't screw
+        # up our call to #[]; we'll be sure to get an Attribute or nil...
+        raise ArgumentError, "name must be a string or symbol, not a: #{name.class}" unless
+          name.is_a?(String) or name.is_a?(Symbol)
+        result = self[model, name]
+        result ? result : new(__type__, model, name, ...)
+      end
+
+      private
+      def attributes
+        @attributes ||= {}
+      end
+
+    end
+
     #
     # Create an Axis::Attribute instance of the specified type, associated with
     # the specified model class, having the provided name and caption. The
