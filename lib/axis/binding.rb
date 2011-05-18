@@ -1,4 +1,4 @@
-# vim: fileencoding=utf8:
+# vim: fileencoding=utf-8:
 module Axis
 
   #
