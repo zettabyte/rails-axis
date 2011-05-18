@@ -117,7 +117,7 @@ module Axis
         raise ArgumentError, "invalid model: #{model.name}" unless model.ancestors.include?(ActiveRecord::Base)
         options = args.extract_options!
         attrs   = args.flatten.map do |attr|
-          attr  = attr.is_a?(Symbol) : attr.to_s : attr
+          attr  = attr.is_a?(Symbol) ? attr.to_s : attr
           raise ArgumentError, "invalid attribute type: #{attr.class}" unless attr.is_a?(String)
           raise ArgumentError, "invalid attribute: #{attr}" unless model.column_names.include?(attr)
           attr
@@ -145,7 +145,7 @@ module Axis
         raise ArgumentError, "name must be a string or symbol, not a: #{name.class}" unless
           name.is_a?(String) or name.is_a?(Symbol)
         result = self[model, name]
-        result ? result : new(__type__, model, name, ...)
+        # TODO: result ? result : new(__type__, model, name, ...)
       end
 
       private
@@ -244,7 +244,7 @@ module Axis
       result = [fields].flatten.map do |field|
         tmp = field.is_a?(String) ? field.intern : field
         raise ArgumentError, "invalid type for field: #{field.class} (#{field})" unless tmp.is_a?(Symbol)
-        raise ArgumentError, "invalid field: #{tmp}" unless tmp.to_s != "" @model.column_names.include?(tmp.to_s)
+        raise ArgumentError, "invalid field: #{tmp}" unless tmp.to_s != "" and @model.column_names.include?(tmp.to_s)
       end.uniq.freeze
       raise ArgumentError, "no fields provided" if result.empty?
       result
