@@ -1,8 +1,5 @@
 # vim: fileencoding=utf-8:
 
-require 'axis/attribute/filter'
-require 'axis/attribute/sort'
-
 module Axis
 
   #
@@ -25,6 +22,9 @@ module Axis
   # to the metadata that all Axis attributes store.
   #
   class Attribute
+
+    autoload :Filter, 'axis/attribute/filter'
+    autoload :Sort,   'axis/attribute/sort'
 
     #
     # The keys of this hash are the official Axis attribute types. The Axis

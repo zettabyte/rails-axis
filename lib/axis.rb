@@ -1,5 +1,11 @@
 # vim: fileencoding=utf-8:
 module Axis
+  autoload :Attribute,  'axis/attribute'
+  autoload :Binding,    'axis/binding'
+  autoload :Controller, 'axis/controller'
+  autoload :Model,      'axis/model'
+  autoload :State,      'axis/state'
+  autoload :Version,    'axis/version'
 end
 
 #
@@ -8,7 +14,5 @@ end
 #
 require 'action_controller'
 require 'active_record'
-require 'axis/controller'
-require 'axis/model'
 ActionController::Base.send(:include, Axis::Controller)
 ActiveRecord::Base.send(:include, Axis::Model)
