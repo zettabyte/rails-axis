@@ -51,8 +51,8 @@ module Axis
       # an associated code block that performs the actual filtration.
       #
       def initialize(type, attribute_type, model, options = {}, &block)
-        @type           = type.is_a?(String)           : type.intern           : type
-        @attribute_type = attribute_type.is_a?(String) : attribute_type.intern : attribute_type
+        @type           = type.is_a?(String)           ? type.intern           : type
+        @attribute_type = attribute_type.is_a?(String) ? attribute_type.intern : attribute_type
         @model          = model
         @block          = block
         raise ArgumentError, "invalid type for filter type: #{type.class}"              unless @type.is_a?(Symbol)
@@ -177,7 +177,7 @@ module Axis
           # error. If the type is invalid, it should have been caught above so
           # that we never hit this code path.
           #
-          raise "internal error: unrecognized filter type: #{@type} (#{@type.class})"
+          raise "internal error: unrecognized filter type: #{@type} (#{@type.class})" unless @type == :range
         end
 
         #
@@ -216,8 +216,8 @@ module Axis
         else
           option = name.intern
         end
-        if options.has_key?(option)
-          options[option]
+        if @options.has_key?(option)
+          @options[option]
         else
           super
         end
