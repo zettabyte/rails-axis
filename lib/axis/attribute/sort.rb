@@ -67,15 +67,11 @@ module Axis
       # model. The model must be the actual model class (Class instance).
       #
       def initialize(type, column, model)
-        @type   = type.is_a?(String)   ? type.downcase.strip.intern : (type == true ? :true : type)
-        @column = column.is_a?(String) ? column.intern : column
-        @model  = model
-        raise ArgumentError, "invalid type for type: #{type.class}"     unless @type.is_a?(Symbol)
-        raise ArgumentError, "invalid type for column: #{column.class}" unless @column.is_a?(Symbol)
-        raise ArgumentError, "invalid type for model: #{model.class}"   unless @model.is_a?(Class)
-        raise ArgumentError, "invalid model: #{@model.name}" unless @model.ancestors.include?(ActiveRecord::Base)
-        raise ArgumentError, "invalid column: #{@column}"    unless @model.column_names.include?(@column.to_s)
-        raise ArgumentError, "invalid type: #{@type}"        unless ALIASES[@type]
+        @type   = type.is_a?(String) ? type.downcase.strip.intern : (type == true ? :true : type)
+        @column = Axis::Attribute.validate_field(column, model)
+        @model  = model # this also validated by validate_field above
+        raise ArgumentError, "invalid type for type: #{type.class}" unless @type.is_a?(Symbol)
+        raise ArgumentError, "invalid type: #{@type}"               unless ALIASES[@type]
         @type = ALIASES[@type] # normalize the type
       end
 
@@ -119,7 +115,7 @@ module Axis
       #
       def order(dir, scope = nil)
         scope   ||= @model
-        scope.order @column.send(direction(dir))
+        scope.order @column.intern.send(direction(dir))
       end
 
     end # class Sort

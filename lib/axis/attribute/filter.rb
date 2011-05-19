@@ -51,21 +51,17 @@ module Axis
       # an associated code block that performs the actual filtration.
       #
       def initialize(type, attribute_type, model, options = {}, &block)
-        @type           = type.is_a?(String)           ? type.intern           : type
-        @attribute_type = attribute_type.is_a?(String) ? attribute_type.intern : attribute_type
-        @model          = model
+        @type           = type.is_a?(String) ? type.intern : type
+        @attribute_type = Axis::Attribute.validate_type(attribute_type)
+        @model          = Axis::Attribute.validate_model(model)
         @block          = block
-        raise ArgumentError, "invalid type for filter type: #{type.class}"              unless @type.is_a?(Symbol)
-        raise ArgumentError, "invalid type for attribute_type: #{attribute_type.class}" unless @attribute_type.is_a?(Symbol)
-        raise ArgumentError, "invalid type for model: #{model.class}"                   unless @model.is_a?(Class)
-        raise ArgumentError, "invalid type for options: #{options.class}"               unless options.is_a?(Hash)
-        raise ArgumentError, "invalid filter type: #{@type}"              unless TYPES.include?(@type)
-        raise ArgumentError, "invalid attribute_type: #{@attribute_type}" unless Axis::Attribute::ALIASES[@attribute_type]
-        raise ArgumentError, "invalid model: #{@model.name}"              unless @model.ancestors.include?(ActiveRecord::Base)
+        raise ArgumentError, "invalid type for options: #{options.class}"  unless options.is_a?(Hash)
+        raise ArgumentError, "invalid type for filter type: #{type.class}" unless @type.is_a?(Symbol)
+        raise ArgumentError, "invalid filter type: #{@type}"               unless TYPES.include?(@type)
         raise ArgumentError, "invalid options: " +
           (options.keys - OPTIONS).map { |o| o.inspect }.join(", ") unless
           (options.keys - OPTIONS).empty?
-        @attribute_type = Axis::Attribute::ALIASES[@attribute_type]
+        @attribute_type = Axis::Attribute::ALIASES[@attribute_type] # canonical
 
         #
         # Set up our collection of "options". All entries in this hash will be

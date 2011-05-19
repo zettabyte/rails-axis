@@ -260,8 +260,8 @@ module Axis
       # data. Otherwise it will create a new Axis::Attribute instance to store
       # this metadata for the attribute.
       #
-      def axis_visible_on(*args, &block)
-        Axis::Attribute.visible(self, *args, &block)
+      def axis_display_on(*args, &block)
+        Axis::Attribute.displayable(self, *args, &block)
       end
 
       #
@@ -271,8 +271,8 @@ module Axis
       # data. Otherwise it will create a new Axis::Attribute instance to store
       # this metadata for the attribute.
       #
-      def axis_sort_on(*args, &block)
-        Axis::Attribute.sortable(self, *args, &block)
+      def axis_sort_on(*args)
+        Axis::Attribute.sortable(self, *args)
       end
 
       def axis_on(*args, &block)

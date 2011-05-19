@@ -98,7 +98,7 @@ module Axis
         if name
           # model plus name lookup either gives you a reference to the
           # associated attribute or nil...
-          result[name]
+          result ? result[name] : nil
         else
           # model-only variation never gives you original hash, but always gives
           # you *a* hash...
@@ -110,42 +110,60 @@ module Axis
       # Finds or creates a new attribute using the same method signature as the
       # model helper #axis_search_on (with an additional leading parameter for
       # the model class). If an existing attribute is found, it is updated
-      # according to the requested search settings.
+      # according to the requested search settings. The new (or existing)
+      # instance is returned and a reference saved in the global collection.
       #
       def searchable(model, *args, &block)
-        raise ArgumentError, "invalid model type: #{model.class}" unless model.is_a?(Class)
-        raise ArgumentError, "invalid model: #{model.name}" unless model.ancestors.include?(ActiveRecord::Base)
         options = args.extract_options!
-        attrs   = args.flatten.map do |attr|
-          attr  = attr.is_a?(Symbol) ? attr.to_s : attr
-          raise ArgumentError, "invalid attribute type: #{attr.class}" unless attr.is_a?(String)
-          raise ArgumentError, "invalid attribute: #{attr}" unless model.column_names.include?(attr)
-          attr
-        end
-        raise ArgumentError, "no attributes provided" if attrs.empty?
-        raise ArgumentError, "some attributes specified multiple times" if (attrs.uniq.length < attrs.length).empty?
-
-        type = options.delete(:type)
-        name = options.delete(:name)
-        options[:filter]
-        options[:not]
-        options[:null]
-        options[:blank]
-        options[:empty]
-        options[:multi]
-        options[:false]
-        options[:values]
-        new(type, model, name, "Unset Caption", attrs, nil, nil, block)
-
+        type    = options.delete(:type)
+        name    = options.delete(:name)
+        find_or_create(model, name, args, type).searchable(options, &block)
       end
 
-      def for(model, name)
-        # Validate name's type so if callers pass nil for it, it doesn't screw
-        # up our call to #[]; we'll be sure to get an Attribute or nil...
-        raise ArgumentError, "name must be a string or symbol, not a: #{name.class}" unless
-          name.is_a?(String) or name.is_a?(Symbol)
+      #
+      #
+      def displayable(model, *args, &block)
+        options = args.extract_options!
+        type    = options.delete(:type)
+        name    = options.delete(:name)
+        caption = options.delete(:caption)
+        find_or_create(model, name, args, type).displayable(caption, &block)
+      end
+
+      #
+      #
+      def sortable(model, *args)
+        options = args.extract_options!
+        type    = options.delete(:type)
+        name    = options.delete(:name)
+        sort    = options.delete(:sort)
+        find_or_create(model, name, args, type).sortable(sort || true)
+      end
+
+      #
+      # Finds or creates (and registers if creating) an attribute with the
+      # provided characteristics. The attribute will be basic if created (not
+      # yet displayable, sortable, or searchable). If an attribute for the
+      # specified model and name is already registered then it will be returned
+      # *after* it is verified that the type (if provided) and fields match the
+      # existing attribute.
+      #
+      def find_or_create(model, name, fields, type = nil)
+        name   = validate_name(name) # mainly to normalize for lookup
         result = self[model, name]
-        # TODO: result ? result : new(__type__, model, name, ...)
+        if result
+          fields = validate_fields(fields)
+          type   = validate_type(type) if type
+          raise ArgumentError, "provided fields list (#{fields.join(', ')}) doesn't match " +
+            "existing attribute's list: #{result.fields.join(', ')}" unless fields == result.fields
+          raise ArgumentError, "provided attribute type (#{type}) doesn't match " +
+            "existing attribute's type: #{result.type}" unless !type or type == result.type
+        else
+          result                  = new(model, name, fields, type)
+          attributes[model]     ||= {}
+          attributes[model][name] = result
+        end
+        result
       end
 
       private
@@ -156,181 +174,198 @@ module Axis
     end
 
     #
-    # Create an Axis::Attribute instance of the specified type, associated with
-    # the specified model class, having the provided name and caption. The
-    # attribute will be associated with the specified fields (this being an
-    # array of column names belonging to the associated model class). Also, the
-    # attribute will allow sorting (if not false or nil) using the provided
-    # sorting options. Finally, the attribute will transform the values of all
-    # associated fields into a single data object using the provided display
-    # block and will filter records using user-provided input using the provided
-    # filter block.
+    # Create a minimal Attribute instance that isn't yet displayable, sortable,
+    # or searchable.
     #
-    # The default constructor has a rigid method signature because it isn't
-    # designed to be used directly by client code (though it is available).
-    #
-    def initialize(type, model, name, caption, fields, sorting, display, filter)
-      #
-      # Validate, normalize, and otherwise process our various parameters into
-      # our instance variables. The validation routines are written to expect
-      # this call order and they'll raise exceptions if their arguments (or the
-      # state of the object) is invalid.
-      #
-      @type    = validate_type(type)
-      @model   = validate_model(model)
-      @name    = validate_name(name)
-      @caption = validate_caption(caption)
-      @fields  = validate_fields(fields)
-      @sort    = validate_sort(sorting)
-      @display = validate_display(display)
-      @filter  = validate_filter(filter)
-      @literal = true
+    def initialize(model, name, fields, type = nil)
+      @model  = self.class.validate_model(model)
+      @name   = self.class.validate_name(name)
+      @fields = self.class.validate_fields(fields, @model)
+      if @fields.length == 1 and @fields.first == @name
+        @literal = true
+        @type    = self.class.validate_type(@model.columns_hash[@name].type)
+        if type
+          type = self.class.validate_type(type)
+          raise ArgumentError, "type provided for literal attribute (#{type.class}:#{type}) " +
+            "doesn't match column's type: #{@type}" unless ALIASES[type] == ALIASES[@type]
+        end
+      else
+        @literal = false
+        @type    = self.class.validate_type(type)
+      end
+      @filter      = nil # when searchable, an Axis::Attribute::Filter instance
+      @caption     = nil # when displayable, string (attribute's display name)
+      @display     = nil # when displayable, block of code (or still nil)
+      @sort        = nil # when sortable, array of Sort instances
+      @searchable  = false
+      @displayable = false
+      @sortable    = false
     end
 
-    def string?   ; ALIASES[@type] == :string   ; end
-    def binary?   ; ALIASES[@type] == :binary   ; end
-    def numeric?  ; ALIASES[@type] == :numeric  ; end
-    def temporal? ; ALIASES[@type] == :temporal ; end
-    def boolean?  ; ALIASES[@type] == :boolean  ; end
+    #
+    # Convert this attribute into a searchable one (or re-configure its search
+    # settings).
+    #
+    def searchable(options = {}, &block)
+      raise ArgumentError, "invalid type for options hash: #{options.class}" unless options.is_a?(Hash)
+      filter      = options.delete(:filter) || :default
+      @filter     = Axis::Attribute::Filter.new(filter, @type, @model, options, &block)
+      @searchable = true
+    end
 
-    def literal? ;  @literal ; end
-    def logical? ; !@literal ; end
+    #
+    # Convert this attribute into a displayable one (or re-configure its display
+    # settings).
+    #
+    def displayable(caption = nil, &block)
+      @caption     = caption ? self.class.validate_caption(caption) : @name.titleize.freeze
+      @display     = block
+      @displayable = true
+    end
 
-    def display? ; !!@display ; end
-    def sort?    ; !!@sort    ; end
-    def filter?  ; !!@filter  ; end
+    #
+    # Convert this attribute into a sortable one (or re-configure its sorting
+    # settings).
+    #
+    def sortable(*sort)
+      raise "cannot make an Axis::Attribute sortable until its first displayable" unless @displayable
+      @sort     = self.class.validate_sort(sort, @model, @fields)
+      @sortable = true
+    end
 
-    attr_reader :type
-    attr_reader :name
-    attr_reader :caption
-    attr_reader :fields
+    attr_reader :model   # a class inheriting from ActiveRecord::Base
+    attr_reader :name    # frozen string
+    attr_reader :fields  # frozen array of frozen strings
+    attr_reader :type    # symbol
+    attr_reader :filter  # Filter instance
+    attr_reader :caption # frozen string
+    attr_reader :sort    # array of Sort instances
+
+    def string?      ; ALIASES[@type] == :string   ; end
+    def binary?      ; ALIASES[@type] == :binary   ; end
+    def numeric?     ; ALIASES[@type] == :numeric  ; end
+    def temporal?    ; ALIASES[@type] == :temporal ; end
+    def boolean?     ; ALIASES[@type] == :boolean  ; end
+    def literal?     ;  @literal     ; end
+    def logical?     ; !@literal     ; end
+    def searchable?  ;  @searchable  ; end
+    def displayable? ;  @displayable ; end
+    def sortable?    ;  @sortable    ; end
 
     ############################################################################
-    private
+    class << self
     ############################################################################
 
-    def validate_type(type)
-      result = type.is_a?(String) ? type.intern : type
-      raise ArgumentError, "invalid type for type: #{type.class}" unless result.is_a?(Symbol)
-      raise ArgumentError, "invalid type: #{result}"              unless ALIASES[result]
-      if TYPE[ALIASES[result]].include?(result)
-        result # retain first-class aliases un-normalized
-      else
-        ALIASES[result]
+      def validate_model(model)
+        raise ArgumentError, "invalid type for model: #{model.class}" unless model.is_a?(Class)
+        raise ArgumentError, "invalid model: #{model.name}"           unless model.ancestors.include?(ActiveRecord::Base)
+        model
       end
-    end
 
-    def validate_model(model)
-      raise ArgumentError, "invalid type for model: #{model.class}" unless model.is_a?(Class)
-      raise ArgumentError, "invalid model: #{model.name}"           unless model.ancestors.include?(ActiveRecord::Base)
-      model
-    end
+      def validate_name(name)
+        result = name.is_a?(Symbol) ? name.to_s : name
+        raise ArgumentError, "invalid type for name: #{name.class}" unless result.is_a?(String)
+        raise ArgumentError, "invalid name: #{result}"              unless result =~ /\A[a-z0-9_-]+\z/i
+        result.gsub(/-/, "_").freeze
+      end
 
-    def validate_name(name)
-      result = name.is_a?(String) ? name.intern : name
-      raise ArgumentError, "invalid type for name: #{name.class}" unless result.is_a?(Symbol)
-      raise ArgumentError, "invalid name: #{result}"              unless result.to_s =~ /\A[a-z0-9_-]+\z/i
-      result
-    end
+      def validate_field(field, model = nil)
+        model  = validate_model(model) if model
+        result = field.is_a?(Symbol) ? field.to_s : field
+        raise ArgumentError, "invalid type for field: #{field.class} (#{field})" unless result.is_a?(String)
+        raise ArgumentError, "invalid field: #{result}" if result.blank?
+        if model
+          raise ArgumentError, "invalid field: #{result} (not in database)" unless model.column_names.include?(result)
+        end
+        result.freeze
+      end
 
-    def validate_caption(caption)
-      result = caption.is_a?(Symbol) ? caption.to_s : caption
-      raise ArgumentError, "invalid type for caption: #{caption.class}" unless result.is_a?(String)
-      raise ArgumentError, "invalid caption: (blank)"                   if result.strip.empty?
-      result.strip.freeze
-    end
+      def validate_fields(fields, model = nil)
+        result = [fields].flatten.map do |field|
+          validate_field(field, model)
+        end.uniq.freeze
+        raise ArgumentError, "no fields provided" if result.empty?
+        result
+      end
 
-    def validate_fields(fields)
-      result = [fields].flatten.map do |field|
-        tmp = field.is_a?(String) ? field.intern : field
-        raise ArgumentError, "invalid type for field: #{field.class} (#{field})" unless tmp.is_a?(Symbol)
-        raise ArgumentError, "invalid field: #{tmp}" unless tmp.to_s != "" and @model.column_names.include?(tmp.to_s)
-      end.uniq.freeze
-      raise ArgumentError, "no fields provided" if result.empty?
-      result
-    end
-
-    def validate_sort(sort)
-      result = case sort
-      when Hash  then sort_options_hash(sort)
-      when Array then sort_options_array(sort)
-      else
-        if sort
-          @fields.map { |f| Axis::Attribute::Sort.new(sort, f, @model) }
+      def validate_type(type)
+        result = type.is_a?(String) ? type.intern : type
+        raise ArgumentError, "invalid type for type: #{type.class}" unless result.is_a?(Symbol)
+        raise ArgumentError, "invalid type: #{result}"              unless ALIASES[result]
+        if TYPE[ALIASES[result]].include?(result)
+          result # retain first-class aliases un-normalized
         else
-          nil # sorting turned off
+          ALIASES[result]
         end
       end
-      raise ArgumentError, "no sort fields specified" if result and result.empty?
-      result ? result.flatten.uniq.freeze : nil
-    end
 
-    def validate_display(display)
-      return display if [nil, true].include?(display)
-      raise ArgumentError, "invalid type for display: #{display.class}" unless display.is_a?(Proc)
-      display
-    end
-
-    def validate_filter(filter)
-      return filter if [nil, true].include?(filter)
-      raise ArgumentError, "invalid type for filter: #{filter.class}" unless filter.is_a?(Proc)
-      filter
-    end
-
-    #
-    # Used to recursively process a sort options array. The @model must already
-    # be set. Returns an array of Axis::Attribute::Sort instances.
-    #
-    def sort_options_array(sort)
-      #
-      # First try to process any 2-element arrays that may be [column, type]
-      # sorting definitions...
-      #
-      result = nil
-      if sort.length == 2 and
-        (sort.first.is_a?(String) or sort.first.is_a?(Symbol)) and
-        (sort.last.is_a?(String)  or sort.last.is_a?(Symbol))
-        begin
-          result = Axis::Attribute::Sort.new(sort.last, sort.first, @model)
-        rescue ArgumentError
-          reuslt = nil
-        end
+      def validate_caption(caption)
+        result = caption.is_a?(Symbol) ? caption.to_s : caption
+        raise ArgumentError, "invalid type for caption: #{caption.class}" unless result.is_a?(String)
+        raise ArgumentError, "invalid caption: (blank)"                   if result.strip.empty?
+        result.strip.freeze
       end
-      return [result] if result
 
-      #
-      # Now just process the array as a list of sorting definitions...
-      #
-      result = sort.map do |entry|
-        case entry
-        when Hash  then sort_options_hash(entry)
-        when Array then sort_options_array(entry)
-        when Axis::Attribute::Sort
-          # invalid if model doesn't match...
-          raise ArgumentError, "Model in Axis::Attribute::Sort instance in sort options array doesn't match\n" +
-            "our model:\n" +
-            "  Sort Instance: <id=#{entry.id} type=#{model.type} model=#{entry.model.name} column=#{entry.column}>\n" +
-            "  Our Model:     #{@model.name}" unless @model == entry.model
-          # ...otherwise just (re)use this instance since they're immutable
-          entry 
+      def validate_sort(sort, model, fields = nil)
+        result = case sort
+        when Hash  then validate_sort_hash(sort, model)
+        when Array then validate_sort_array(sort, model)
         else
-          # let the Sort class's initializer validate the column name
-          Axis::Attribute::Sort.new(true, entry, @model)
+          raise ArgumentError, "invalid type for fields: #{fields.class}" unless fields.is_a?(Array)
+          fields.map { |f| Axis::Attribute::Sort.new(sort, f, model) }
+        end.flatten
+        raise ArgumentError, "no sort fields specified" if result.empty?
+        result.uniq.freeze
+      end
+
+      private
+      def validate_sort_hash(sort, model)
+        sort.map do |column, type|
+          Axis::Attribute::Sort.new(type, column, model)
         end
       end
-      raise ArgumentError, "no sort fields specified in array" if result.empty?
-      result
-    end
 
-    #
-    # Used to break out logic used to process sort options contained within a
-    # hash. Called by #validate_sort and #sort_options_array.
-    #
-    def sort_options_hash(sort)
-      sort.map do |column, type|
-        Axis::Attribute::Sort.new(type, column, @model)
+      def validate_sort_array(sort, model)
+        #
+        # First try to process any 2-element arrays that may be [column, type]
+        # sorting definitions...
+        #
+        result = nil
+        if sort.length == 2 and
+          (sort.first.is_a?(String) or sort.first.is_a?(Symbol)) and
+          (sort.last.is_a?(String)  or sort.last.is_a?(Symbol))
+          begin
+            result = Axis::Attribute::Sort.new(sort.last, sort.first, model)
+          rescue ArgumentError
+            result = nil
+          end
+        end
+        return [result] if result
+        #
+        # Now just process the array as a list of sorting definitions...
+        #
+        result = sort.map do |entry|
+          case entry
+          when Hash  then validate_sort_hash(entry, model)
+          when Array then validate_sort_array(entry, model)
+          when Axis::Attribute::Sort
+            # invalid if model doesn't match...
+            raise ArgumentError, "Model in Axis::Attribute::Sort instance in sort options array doesn't match\n" +
+              "our model:\n" +
+              "  Sort Instance: <id=#{entry.id} type=#{entry.type} model=#{entry.model.name} column=#{entry.column}>\n" +
+              "  Our Model:     #{model.name}" unless model == entry.model
+            # ...otherwise just (re)use this instance since they're immutable
+            entry 
+          else
+            # let the Sort class's initializer validate the column name
+            Axis::Attribute::Sort.new(true, entry, model)
+          end
+        end
+        raise ArgumentError, "no sort fields specified in array" if result.empty?
+        result
       end
-    end
+
+    end # class << self
 
   end # class Attribute
 end   # module Axis
