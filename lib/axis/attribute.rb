@@ -17,9 +17,9 @@ module Axis
   # "logical" attribute in essence defines a new (logical) data field that is
   # now available through the model class. The logical attributes may be an
   # abstraction, transformation, or aggregation of one or more back-end model
-  # data fields. Logical attributes include code that knows how to combine or
-  # otherwise transform the data fields into a new, single data type in addition
-  # to the metadata that all Axis attributes store.
+  # data columns. Logical attributes include code that knows how to combine or
+  # otherwise transform the data columns into a new, single data type in
+  # addition to the metadata that all Axis attributes store.
   #
   class Attribute
 
@@ -95,11 +95,12 @@ module Axis
     # Create a minimal Attribute instance that isn't yet displayable, sortable,
     # or searchable.
     #
-    def initialize(model, name, fields, type = nil)
+    def initialize(model, name, columns, type = nil)
       @model  = Axis.validate_model(model)
-      @name   = self.class.validate_name(name)
-      @fields = Axis.validate_columns(fields, @model)
-      if @fields.length == 1 and @fields.first == @name
+      @name   = self.class.validate_name(name).freeze
+      @columns = Axis.validate_columns(columns, @model).freeze
+      @columns.each { |c| c.freeze }
+      if @columns.length == 1 and @columns.first == @name
         @literal = true
         @type    = self.class.validate_type(@model.columns_hash[@name].type)
         if type
@@ -136,7 +137,7 @@ module Axis
     # settings).
     #
     def displayable(caption = nil, &block)
-      @caption     = caption ? self.class.validate_caption(caption) : @name.titleize.freeze
+      @caption     = caption ? self.class.validate_caption(caption).freeze : @name.titleize.freeze
       @display     = block
       @displayable = true
     end
@@ -147,13 +148,13 @@ module Axis
     #
     def sortable(*sort)
       raise "cannot make an Axis::Attribute sortable until its first displayable" unless @displayable
-      @sort     = self.class.validate_sort(sort, @model, @fields)
+      @sort     = self.class.validate_sort(sort, @model, @columns)
       @sortable = true
     end
 
     attr_reader :model   # a class inheriting from ActiveRecord::Base
     attr_reader :name    # frozen string
-    attr_reader :fields  # frozen array of frozen strings
+    attr_reader :columns  # frozen array of frozen strings
     attr_reader :type    # symbol
     attr_reader :filter  # Filter instance
     attr_reader :caption # frozen string
@@ -235,6 +236,93 @@ module Axis
       end
 
       #
+      # This takes a model and a list of arguments and returns two values (in a
+      # two-element array), a registered attribute instance (first) and an
+      # options hash (last).
+      #
+      # This expects to process argument in the same form as those passed to the
+      # model macro helper methods: #axis_search_on, #axis_display_on,
+      # #axis_sort_on, and #axis_on. The arguments accepted by these methods are
+      # passed through to the Attribute class methods #searchable, #displayable,
+      # #sortable, and #create respectively. These four then immediately use
+      # method to actually process the arguments originally provided in the
+      # model.
+      #
+      # If the arguments are invalid then an ArgumentError is raised.
+      #
+      # The method expects there to optionally be a hash as the last argument in
+      # the list of parameters. This is the standard, optional "options" hash
+      # that is common in most APIs. This is what gets returned as the second
+      # entry in the returned, two-element array. If the last argument isn't a
+      # hash then an empty hash is created and returned. So, either way, an
+      # options hash gets returned to the caller.
+      #
+      # However, if there *is* an options hash passed to this method, some of
+      # the entries, if they exist, will be processed and removed before the
+      # options hash is returned. Namely, the :name and :type entries.
+      #
+      # All arguments besides the optional options hash should reference the
+      # name of a column in the provided model (or be a nested array of such
+      # references). There must be at least one such argument besides the
+      # options hash. However, if there is exactly on such argument, instead
+      # of referencing a column name, it may optionally reference the name of
+      # an existing, registered attribute.
+      #
+      # Either way, these names may be symbols or strings and will be used to
+      # either find an existing, registered attribute that references the same
+      # list of columns (in the same order) or create a new one. If a new one
+      # is created it will be in the most basic state, meaning it won't yet be
+      # displayable, sortable, or searchable. Also, it will be registered once
+      # returned. It an existing attribute is returned, it could be in any
+      # state.
+      #
+      def load(model, *args)
+        model   = Axis.validate_model(model)
+        options = args.extract_options!
+        columns = args.flatten!
+        name    = validate_name(options.delete(:name)) if options.has_key?(:name)
+        type    = validate_type(options.delete(:type)) if options.has_key?(:type)
+        result  = [nil, options]
+
+        #
+        # Handle special case where a single column name provided that refers
+        # to the name of a pre-existing logical attribute...
+        #
+        if columns.length == 1 and !name
+          name = validate_name(columns.first)
+          tmp  = self[model, name]
+          if tmp and tmp.logical?
+            columns = tmp.columns
+          end
+        end
+
+        #
+        # Validate list of columns and lookup attribute using name
+        #
+        raise ArgumentError, "no attribute name or list of column names provided" if columns.empty?
+        raise ArgumentError, "no :name option provided; required for logical attributes (having several columns)" unless name
+        columns   = Axis.validate_columns(columns, model)
+        result[0] = self[model, name]
+
+        #
+        # If we found an existing attribute, validate that the :name and :type
+        # options that were provided (if any) match. Otherwise create a new
+        # attribute and register it.
+        #
+        if result[0]
+          raise ArgumentError, "provided columns list (#{columns.join(', ')}) doesn't match " +
+            "existing attribute's list: #{result[0].columns.join(', ')}" unless columns == result.columns
+          raise ArgumentError, "provided attribute type (#{type}) doesn't match " +
+            "existing attribute's type: #{result[0].type}" if type and type != result.type
+        else
+          result[0]               = new(model, name, columns, type)
+          attributes[model]     ||= {}
+          attributes[model][name] = result[0]
+        end
+        result
+      end
+
+      #
       # Finds or creates a new attribute using the same method signature as the
       # model helper #axis_search_on (with an additional leading parameter for
       # the model class). If an existing attribute is found, it is updated
@@ -242,11 +330,8 @@ module Axis
       # instance is returned and a reference saved in the global collection.
       #
       def searchable(model, *args, &block)
-        result, options = load(model, args)
-        options = args.extract_options!
-        type    = options.delete(:type)
-        name    = options.delete(:name)
-        find_or_create(model, name, args, type).searchable(options, &block)
+        result, options = load(model, *args)
+        result.searchable(options, &block)
       end
 
       #
@@ -257,11 +342,8 @@ module Axis
       # instance is returned and a reference saved in the global collection.
       #
       def displayable(model, *args, &block)
-        options = args.extract_options!
-        type    = options.delete(:type)
-        name    = options.delete(:name)
-        caption = options.delete(:caption)
-        find_or_create(model, name, args, type).displayable(caption, &block)
+        result, options = load(model, *args)
+        result.displayable(options[:caption], &block)
       end
 
       #
@@ -272,83 +354,131 @@ module Axis
       # is returned and a reference saved in the global collection.
       #
       def sortable(model, *args, &block)
-        options = args.extract_options!
-        type    = options.delete(:type)
-        name    = options.delete(:name)
-        caption = options.delete(:caption)
-        sort    = options.delete(:sort)
-        result  = find_or_create(model, name, args, type)
-        if caption
-          result.displayable(caption, &block)
+        result, options = load(model, *args)
+        if options[:caption] or (result.displayable? and block)
+          result.displayable(options[:caption], &block)
         end
-        result.sortable(sort || true)
+        result.sortable(options[:sort] || true)
       end
 
       #
-      # Finds or creates (and registers if creating) an attribute with the
-      # provided characteristics. The attribute will be basic if created (not
-      # yet displayable, sortable, or searchable). If an attribute for the
-      # specified model and name is already registered then it will be returned
-      # *after* it is verified that the type (if provided) and fields match the
-      # existing attribute.
+      # Finds or creates a new attribute using the same method signature as the
+      # model helper #axis_on (with an additional leading parameter for the
+      # model class). If an existing attribute is found, it is updated according
+      # to the requested settings (for searching, display or sorting) included
+      # in the argument list (and options hash). The new (or existing) instance
+      # is returned and a reference saved in the global collection.
       #
-      def load(model, args)
-        name   = validate_name(name) # mainly to normalize for lookup
-        result = self[model, name]
-        if result
-          fields = Axis.validate_columns(fields)
-          type   = validate_type(type) if type
-          raise ArgumentError, "provided fields list (#{fields.join(', ')}) doesn't match " +
-            "existing attribute's list: #{result.fields.join(', ')}" unless fields == result.fields
-          raise ArgumentError, "provided attribute type (#{type}) doesn't match " +
-            "existing attribute's type: #{result.type}" unless !type or type == result.type
-        else
-          result                  = new(model, name, fields, type)
-          attributes[model]     ||= {}
-          attributes[model][name] = result
+      def create(model *args, &block)
+        result, options = load(model, *args)
+        if options[:caption]
+          result.displayable(options.delete(:caption), &block)
+          block = nil
         end
-        result
-        
+        result.sortable(options.delete(:sort)) if options.has_key?(:sort)
+        (options.empty? and block.nil?) ? result : result.searchable(options, &block)
       end
 
-      def find_or_create(model, name, fields, type = nil)
+      #
+      # Convert any acceptable forms for "name" parameters into a standard form,
+      # namely a string. Returns the parameter as-is if it is already a string
+      # or if it is in an invalid form. This doesn't raise errors.
+      #
+      def normalize_name(name)
+        result = name.is_a?(Symbol) ? name.to_s             : name
+        result.is_a?(String)        ? result.gsub(/-/, "_") : name
       end
 
+      #
+      # Normalize and validate any acceptable forms for "name" parameters. If
+      # the parameter is not in a valid form that represents an attribute name
+      # then an ArgumentError is raised. Otherwise, the normalized form of the
+      # parameter is returned (a string).
+      #
       def validate_name(name)
-        result = name.is_a?(Symbol) ? name.to_s : name
+        result = normalize_name(name)
         raise ArgumentError, "invalid type for name: #{name.class}" unless result.is_a?(String)
         raise ArgumentError, "invalid name: #{result}"              unless result =~ /\A[a-z0-9_-]+\z/i
-        result.gsub(/-/, "_").freeze
+        result
       end
 
-      def validate_type(type)
+      #
+      # Convert any acceptable forms for "type" parameters into a standard form,
+      # namely a symbol. Returns the parameter as-is if it is already a symbol
+      # or if it is in an invalid form. This doesn't raise errors.
+      #
+      def normalize_type(type)
         result = type.is_a?(String) ? type.intern : type
-        raise ArgumentError, "invalid type for type: #{type.class}" unless result.is_a?(Symbol)
-        raise ArgumentError, "invalid type: #{result}"              unless ALIASES[result]
-        if TYPE[ALIASES[result]].include?(result)
-          result # retain first-class aliases un-normalized
+        if result.is_a?(Symbol)
+          if ALIASES[result] and TYPE[ALIASES[result]].include?(result)
+            result # retain first-class aliases un-normalized
+          elsif ALIASES[result]
+            ALIASES[result] # un-alias valid aliases
+          else
+            type # symbol, but not a valid type: return as-is
+          end
         else
-          ALIASES[result]
+          type # not even a symbol, return parameter as-is
         end
       end
 
-      def validate_caption(caption)
-        result = caption.is_a?(Symbol) ? caption.to_s : caption
-        raise ArgumentError, "invalid type for caption: #{caption.class}" unless result.is_a?(String)
-        raise ArgumentError, "invalid caption: (blank)"                   if result.strip.empty?
-        result.strip.freeze
+      #
+      # Normalize and validate any acceptable forms for "type" parameters. If
+      # the parameter is not in a valid form that represents an attribute's type
+      # then an ArgumentError is raised. Otherwise, the normalized form of the
+      # parameter is returned (a symbol).
+      #
+      def validate_type(type)
+        result = normalize_type(type)
+        raise ArgumentError, "invalid type for type: #{type.class}" unless result.is_a?(Symbol)
+        raise ArgumentError, "invalid type: #{result}"              unless ALIASES[result]
+        result
       end
 
-      def validate_sort(sort, model, fields = nil)
+      #
+      # Convert any acceptable forms for "caption" parameters into a standard
+      # form, namely a string. Returns the parameter as-is if it is already a
+      # string or if it is in an invalid form. This doesn't raise errors.
+      #
+      def normalize_caption(caption)
+        result = caption.is_a?(Symbol) ? caption.to_s  : caption
+        result.is_a?(String)           ? result.strip  : caption
+      end
+
+      #
+      # Normalize and validate any acceptable forms for "caption" parameters. If
+      # the parameter is not in a valid form that represents an attribute's
+      # caption then an ArgumentError is raised. Otherwise, the normalized form
+      # of the parameter is returned (a string).
+      #
+      def validate_caption(caption)
+        result = normalize_caption(caption)
+        raise ArgumentError, "invalid type for caption: #{caption.class}" unless result.is_a?(String)
+        raise ArgumentError, "invalid caption: (blank)"                   if     result.empty?
+        result
+      end
+
+      #
+      # Normalize and validate any acceptable forms for "sort" parameters. If
+      # the parameter (or any parts thereof) is not in a valid form that
+      # represents the sorting configuration for an attribute then an
+      # ArgumentError is raised. Otherwise, the normalized form of the
+      # parameter is returned (an array of Axis::Attribute::Sort instances).
+      #
+      # NOTE: Notice the lack of an associated #normalize_sort method. This
+      #       method includes normalization as valid "sort" parameters are
+      #       too complex to justify the code-duplication this would require.
+      #
+      def validate_sort(sort, model, columns = nil)
         result = case sort
         when Hash  then validate_sort_hash(sort, model)
         when Array then validate_sort_array(sort, model)
         else
-          raise ArgumentError, "invalid type for fields: #{fields.class}" unless fields.is_a?(Array)
-          fields.map { |f| Axis::Attribute::Sort.new(sort, f, model) }
+          raise ArgumentError, "invalid type for columns: #{columns.class}" unless columns.is_a?(Array)
+          columns.map { |f| Axis::Attribute::Sort.new(sort, f, model) }
         end.flatten
-        raise ArgumentError, "no sort fields specified" if result.empty?
-        result.uniq.freeze
+        raise ArgumentError, "no sort columns specified" if result.empty?
+        result.uniq
       end
 
       ##########################################################################
@@ -416,7 +546,7 @@ module Axis
             Axis::Attribute::Sort.new(true, entry, model)
           end
         end
-        raise ArgumentError, "no sort fields specified in array" if result.empty?
+        raise ArgumentError, "no sort columns specified in array" if result.empty?
         result
       end
 
