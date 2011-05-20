@@ -99,9 +99,11 @@ module Axis
     # standard form or if it is in an invalid form. This doesn't raise errors.
     #
     def normalize_model(model)
-      model = model.to_s if model.is_a?(Symbol)
-      model = model.camelize.constantize rescue model if model.is_a?(String)
-      model
+      result = model.is_a?(Symbol) ? model.to_s : model
+      if result.is_a?(String)
+        result = result.camelize.constantize rescue model
+      end
+      result
     end
 
     #
@@ -113,6 +115,7 @@ module Axis
     #
     def validate_model(model)
       result = normalize_model(model)
+      result = result.camelize.constantize if result.is_a?(String) # special case
       raise ArgumentError, "invalid type for model: #{model.class}" unless result.is_a?(Class)
       raise ArgumentError, "invalid model: #{model.name}"           unless result.ancestors.include?(ActiveRecord::Base)
       result
@@ -202,7 +205,7 @@ module Axis
       result.each do |c|
         validate_column(c) # avoid re-validating model for each element
         raise ArgumentError, "invalid column: #{c} (not in table: #{model.table_name})" if
-          model and !model.column_names.include?(result)
+          model and !model.column_names.include?(c)
       end
       raise ArgumentError, "no columns provided" if result.empty?
       result
@@ -213,15 +216,15 @@ module Axis
     # a symbol, string, or actual Class instance) and the controller's name is
     # used to try to come up with a model class.
     #
-    # If successful, the model Class instance is returned. Otherwise nil is
-    # returned. No exceptions are raised.
+    # If successful, the model Class instance is returned. Otherwise an
+    # exception is raised.
     #
     def model_from_controller(controller)
-      controller = validate_controller(controller) rescue nil
-      return nil unless controller
-      name   = controller.name.demodulize
-      prefix = controller.name.sub(Regexp.new(Regexp.escape(name) + "$"), "")
-      validate_model(prefix + name.underscore.sub(/_controller$/, "").classify) rescue nil
+      controller = validate_controller(controller)
+      name       = controller.name.demodulize
+      prefix     = controller.name.sub(Regexp.new(Regexp.escape(name) + "$"), "")
+      name       = prefix + name.underscore.sub(/_controller$/, "").singularize.classify
+      validate_model(name)
     end
 
 

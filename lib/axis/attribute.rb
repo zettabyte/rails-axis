@@ -223,11 +223,11 @@ module Axis
       #         instance.
       #
       def [](model, name = nil)
-        result = attributes[model]
+        result = attributes[Axis.normalize_model(model)]
         if name
           # model plus name lookup either gives you a reference to the
           # associated attribute or nil...
-          result ? result[name] : nil
+          result ? result[normalize_name(name)] : nil
         else
           # model-only variation never gives you original hash, but always gives
           # you *a* hash...
@@ -279,7 +279,7 @@ module Axis
       def load(model, *args)
         model   = Axis.validate_model(model)
         options = args.extract_options!
-        columns = args.flatten!
+        columns = args.flatten
         name    = validate_name(options.delete(:name)) if options.has_key?(:name)
         type    = validate_type(options.delete(:type)) if options.has_key?(:type)
         result  = [nil, options]
@@ -369,7 +369,7 @@ module Axis
       # in the argument list (and options hash). The new (or existing) instance
       # is returned and a reference saved in the global collection.
       #
-      def create(model *args, &block)
+      def create(model, *args, &block)
         result, options = load(model, *args)
         if options[:caption]
           result.displayable(options.delete(:caption), &block)
@@ -410,7 +410,7 @@ module Axis
       def normalize_type(type)
         result = type.is_a?(String) ? type.intern : type
         if result.is_a?(Symbol)
-          if ALIASES[result] and TYPE[ALIASES[result]].include?(result)
+          if ALIASES[result] and TYPES[ALIASES[result]].include?(result)
             result # retain first-class aliases un-normalized
           elsif ALIASES[result]
             ALIASES[result] # un-alias valid aliases

@@ -67,6 +67,10 @@ module Axis
     #
     # This DOES NOT do parameter validation (since it's private) but relies on
     # the public class method implementations to pre-validate all the arguments.
+    # The one exception to this is the "action" parameter. This doesn't validate
+    # the action, but neither does the caller. Instead, the action will be
+    # validated later when all bindings have #validate! called on them when the
+    # Axis::Binding class has its first official lookup request.
     #
     # The "type" must be one of the symbolds from the TYPES collection. The
     # "model" should be an ActiveRecord based model Class instance. The "scope"
@@ -95,15 +99,30 @@ module Axis
     # case, there may be several "sibling" bindings, an alias must be unique
     # only amongst a binding's siblings.
     #
-    def initialize(type, model, name = nil, scope = nil, parent = nil)
-      @type     = type
-      @model    = model
-      @name     = name.freeze  if name
-      @scope    = scope.freeze if scope
-      @parent   = parent
-      @children = [] # no kids yet
+    def initialize(controller, action, type, model, name = nil, scope = nil, parent = nil)
+      @controller = controller
+      @action     = action
+      @type       = type
+      @model      = model
+      @name       = name.freeze  if name
+      @scope      = scope.freeze if scope
+      @parent     = parent
+      @children   = [] # no kids yet
       @parent.adopt(self) if @parent
       register! # sets @id
+    end
+
+    #
+    # Called (once) on all created and registered bindings to do delayed
+    # validation. All values are validated before the binding is created except
+    # for the action name since you may create bindings before action methods
+    # are defined when you call #axis_on in a controller before defining your
+    # associated action methods. Run-on sentences are cool.
+    #
+    # So, this should validate the @action member.
+    #
+    def validate!
+      Axis.validate_action(@action, @controller)
     end
 
     attr_reader :id     # index of this instance in class-wide binding array
@@ -355,33 +374,11 @@ module Axis
       end
 
       #
-      # Provide access to the class-level associations hash: this, in reality,
-      # is part of the binding configuration even though not stored as state
-      # within the binding instances themselves. A binding is an associatio
-      # between a specific action on a specific controller and a model. Thus,
-      # this stores half that information, namely it associates a specific
-      # action on a specific controller with a binding instance (which itself
-      # stores the reference to a model class).
-      #
-      # The associations returned is a hash where the keys are controller
-      # classes (Class instances that have inherited from ActionController::Base
-      # somewhere in their ancestry). For each entry, the value is yet another
-      # (nested) hash.
-      #
-      # The nested hash has, for keys, symbols that correspond to a specific
-      # action in the associated controller. The value for each entry will be
-      # an array. Each innermost value array contains one or more references to
-      # Axis::Binding instances. Each such reference denotes (and therefor must
-      # reference) a root binding that is associated with the action on the
-      # associated controller.
-      #
-      # This accessor gives you access only to the list of root-level bindings
-      # for the provided controller and action. This *does* validate that the
-      # controller and action are legitimate, raising ArgumentError if not.
+      # Provide access to the class-level associations hash. This accessor gives
+      # you access only to the list of root-level bindings for the provided
+      # controller and action.
       #
       def associations(controller, action)
-        controller = Axis.normalize_controller(controller)
-        action     = Axis.validate_action(action, controller).freeze
         @associations                     ||= {}
         @associations[controller]         ||= {}
         @associations[controller][action] ||= []
@@ -410,9 +407,9 @@ module Axis
         name  = validate_name(options[:name])        if options[:name]
         model = Axis.validate_model(options[:model]) if options[:model]
         if root
-          controller = Axis.normalize_controller(controller)
+          controller = Axis.validate_controller(controller)
           action     = Axis.normalize_action(action)
-          assoc      = associations(controller, action) # validates controller and action
+          assoc      = associations(controller, action)
           type     ||= (action == "index" ? :set : :single)
           model    ||= Axis.model_from_controller(controller)
           raise ArgumentError, "no model provided and unable to guess from controller" unless model
@@ -431,7 +428,7 @@ module Axis
         # Create this Binding and, if it is a root binding, associate it with
         # the provided controller/action...
         #
-        result = new(type, model, name, scope, parent)
+        result = new(controller, action, type, model, name, scope, parent)
         assoc << result if root
 
         #
@@ -440,7 +437,7 @@ module Axis
         children << options[:child] if options[:child].is_a?(Hash)
         if options[:children].is_a?(Array)
           children += options[:children]
-        elsif option[:children].is_a?(Hash)
+        elsif options[:children].is_a?(Hash)
           children << options[:children]
         end
         children.flatten.compact.each do |child|

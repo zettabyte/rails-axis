@@ -207,6 +207,7 @@ module Axis
       # options are "boolean" see the BOOLEAN_OPTIONS constant.
       #
       def method_missing(name, *args, &block)
+        name = name.to_s
         if name[-1] == "?" and BOOLEAN_OPTIONS.include?(name[0..-2].intern)
           option = name[0..-2].intern
         else
