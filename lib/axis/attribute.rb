@@ -91,96 +91,14 @@ module Axis
       :bool      => :boolean   # alias
     }.freeze
 
-    class << self
-
-      def [](model, name = nil)
-        result = attributes[model]
-        if name
-          # model plus name lookup either gives you a reference to the
-          # associated attribute or nil...
-          result ? result[name] : nil
-        else
-          # model-only variation never gives you original hash, but always gives
-          # you *a* hash...
-          result ? result.dup : {}
-        end
-      end
-
-      #
-      # Finds or creates a new attribute using the same method signature as the
-      # model helper #axis_search_on (with an additional leading parameter for
-      # the model class). If an existing attribute is found, it is updated
-      # according to the requested search settings. The new (or existing)
-      # instance is returned and a reference saved in the global collection.
-      #
-      def searchable(model, *args, &block)
-        options = args.extract_options!
-        type    = options.delete(:type)
-        name    = options.delete(:name)
-        find_or_create(model, name, args, type).searchable(options, &block)
-      end
-
-      #
-      #
-      def displayable(model, *args, &block)
-        options = args.extract_options!
-        type    = options.delete(:type)
-        name    = options.delete(:name)
-        caption = options.delete(:caption)
-        find_or_create(model, name, args, type).displayable(caption, &block)
-      end
-
-      #
-      #
-      def sortable(model, *args)
-        options = args.extract_options!
-        type    = options.delete(:type)
-        name    = options.delete(:name)
-        sort    = options.delete(:sort)
-        find_or_create(model, name, args, type).sortable(sort || true)
-      end
-
-      #
-      # Finds or creates (and registers if creating) an attribute with the
-      # provided characteristics. The attribute will be basic if created (not
-      # yet displayable, sortable, or searchable). If an attribute for the
-      # specified model and name is already registered then it will be returned
-      # *after* it is verified that the type (if provided) and fields match the
-      # existing attribute.
-      #
-      def find_or_create(model, name, fields, type = nil)
-        name   = validate_name(name) # mainly to normalize for lookup
-        result = self[model, name]
-        if result
-          fields = validate_fields(fields)
-          type   = validate_type(type) if type
-          raise ArgumentError, "provided fields list (#{fields.join(', ')}) doesn't match " +
-            "existing attribute's list: #{result.fields.join(', ')}" unless fields == result.fields
-          raise ArgumentError, "provided attribute type (#{type}) doesn't match " +
-            "existing attribute's type: #{result.type}" unless !type or type == result.type
-        else
-          result                  = new(model, name, fields, type)
-          attributes[model]     ||= {}
-          attributes[model][name] = result
-        end
-        result
-      end
-
-      private
-      def attributes
-        @attributes ||= {}
-      end
-
-    end
-
     #
     # Create a minimal Attribute instance that isn't yet displayable, sortable,
     # or searchable.
     #
     def initialize(model, name, fields, type = nil)
-      @model  = self.class.validate_model(model)
+      @model  = Axis.validate_model(model)
       @name   = self.class.validate_name(name)
-      @fields = self.class.validate_fields(fields, @model)
+      @fields = Axis.validate_columns(fields, @model)
       if @fields.length == 1 and @fields.first == @name
         @literal = true
         @type    = self.class.validate_type(@model.columns_hash[@name].type)
@@ -256,10 +174,144 @@ module Axis
     class << self
     ############################################################################
 
-      def validate_model(model)
-        raise ArgumentError, "invalid type for model: #{model.class}" unless model.is_a?(Class)
-        raise ArgumentError, "invalid model: #{model.name}"           unless model.ancestors.include?(ActiveRecord::Base)
-        model
+      #
+      # Allow access to the official attribute registry. This provides two
+      # access methods, a one and a two parameter version. This allows you to
+      # do the following to attempt to get access to an attribute instance
+      # respectively:
+      #
+      #   Axis::Attribute[MyModel][:last_name]
+      #   Axis::Attribute[MyModel, :last_name]
+      #
+      # ====== 1. One Parameter Version ======
+      #
+      # The first version, the one-parameter version, tries to return the hash
+      # that contains all attributes registered under the specified model. If
+      # parameter you provide as a model either isn't a valid model class or is
+      # valid but doesn't yet have any attributes registered for it, then an
+      # empty hash is returned.
+      #
+      # Either way you are always guaranteed to always have a hash returned.
+      # You are ALSO guaranteed that the returned hash is a duplicate of the
+      # underlying registration hash. The point being that you CANNOT use it to
+      # register a new attribute. In other words, the following HAS NO EFFECT:
+      #
+      #   Axis::Attribute[MyModel][:last_name] = my_attribute # DOESN'T WORK!
+      #
+      # This is deliberate as the bracket operators give you read-only access to
+      # the registration collection.
+      #
+      # Review: The one parameter version ALWAYS returns a hash, even if the
+      #         parameter is invalid or otherwise has no attributes registered.
+      #
+      # ====== 2. Two Parameter Version ======
+      #
+      # The second version, the two-parameter version, takes both a model and
+      # a name in order to immediately do a full lookup for the attribute with
+      # the given name, registered to the provided model. This version will
+      # either return an attribute instance if the lookup is successful or will
+      # return nil.
+      #
+      # So, the differentiator here is that this version MAY RETURN NIL. If the
+      # parameters are invalid or, if valid but there isn't an attribute yet
+      # registered to the provided model with the provided name, then nil is
+      # returned (no exceptions are raised). Otherwise you'll get a reference to
+      # the registered attribute.
+      #
+      # Review: This may return nil. Otherwise it returns an Axis::Attribute
+      #         instance.
+      #
+      def [](model, name = nil)
+        result = attributes[model]
+        if name
+          # model plus name lookup either gives you a reference to the
+          # associated attribute or nil...
+          result ? result[name] : nil
+        else
+          # model-only variation never gives you original hash, but always gives
+          # you *a* hash...
+          result ? result.dup : {}
+        end
+      end
+
+      #
+      # Finds or creates a new attribute using the same method signature as the
+      # model helper #axis_search_on (with an additional leading parameter for
+      # the model class). If an existing attribute is found, it is updated
+      # according to the requested search settings. The new (or existing)
+      # instance is returned and a reference saved in the global collection.
+      #
+      def searchable(model, *args, &block)
+        result, options = load(model, args)
+        options = args.extract_options!
+        type    = options.delete(:type)
+        name    = options.delete(:name)
+        find_or_create(model, name, args, type).searchable(options, &block)
+      end
+
+      #
+      # Finds or creates a new attribute using the same method signature as the
+      # model helper #axis_display_on (with an additional leading parameter for
+      # the model class). If an existing attribute is found, it is updated
+      # according to the requested display settings. The new (or existing)
+      # instance is returned and a reference saved in the global collection.
+      #
+      def displayable(model, *args, &block)
+        options = args.extract_options!
+        type    = options.delete(:type)
+        name    = options.delete(:name)
+        caption = options.delete(:caption)
+        find_or_create(model, name, args, type).displayable(caption, &block)
+      end
+
+      #
+      # Finds or creates a new attribute using the same method signature as the
+      # model helper #axis_sort_on (with an additional leading parameter for
+      # the model class). If an existing attribute is found, it is updated
+      # according to the requested sort settings. The new (or existing) instance
+      # is returned and a reference saved in the global collection.
+      #
+      def sortable(model, *args, &block)
+        options = args.extract_options!
+        type    = options.delete(:type)
+        name    = options.delete(:name)
+        caption = options.delete(:caption)
+        sort    = options.delete(:sort)
+        result  = find_or_create(model, name, args, type)
+        if caption
+          result.displayable(caption, &block)
+        end
+        result.sortable(sort || true)
+      end
+
+      #
+      # Finds or creates (and registers if creating) an attribute with the
+      # provided characteristics. The attribute will be basic if created (not
+      # yet displayable, sortable, or searchable). If an attribute for the
+      # specified model and name is already registered then it will be returned
+      # *after* it is verified that the type (if provided) and fields match the
+      # existing attribute.
+      #
+      def load(model, args)
+        name   = validate_name(name) # mainly to normalize for lookup
+        result = self[model, name]
+        if result
+          fields = Axis.validate_columns(fields)
+          type   = validate_type(type) if type
+          raise ArgumentError, "provided fields list (#{fields.join(', ')}) doesn't match " +
+            "existing attribute's list: #{result.fields.join(', ')}" unless fields == result.fields
+          raise ArgumentError, "provided attribute type (#{type}) doesn't match " +
+            "existing attribute's type: #{result.type}" unless !type or type == result.type
+        else
+          result                  = new(model, name, fields, type)
+          attributes[model]     ||= {}
+          attributes[model][name] = result
+        end
+        result
+        
+      end
+
+      def find_or_create(model, name, fields, type = nil)
       end
 
       def validate_name(name)
@@ -267,25 +319,6 @@ module Axis
         raise ArgumentError, "invalid type for name: #{name.class}" unless result.is_a?(String)
         raise ArgumentError, "invalid name: #{result}"              unless result =~ /\A[a-z0-9_-]+\z/i
         result.gsub(/-/, "_").freeze
-      end
-
-      def validate_field(field, model = nil)
-        model  = validate_model(model) if model
-        result = field.is_a?(Symbol) ? field.to_s : field
-        raise ArgumentError, "invalid type for field: #{field.class} (#{field})" unless result.is_a?(String)
-        raise ArgumentError, "invalid field: #{result}" if result.blank?
-        if model
-          raise ArgumentError, "invalid field: #{result} (not in database)" unless model.column_names.include?(result)
-        end
-        result.freeze
-      end
-
-      def validate_fields(fields, model = nil)
-        result = [fields].flatten.map do |field|
-          validate_field(field, model)
-        end.uniq.freeze
-        raise ArgumentError, "no fields provided" if result.empty?
-        result
       end
 
       def validate_type(type)
@@ -318,13 +351,35 @@ module Axis
         result.uniq.freeze
       end
 
+      ##########################################################################
       private
+      ##########################################################################
+
+      #
+      # Access to the attribute registration collection.
+      #
+      def attributes
+        @attributes ||= {}
+      end
+
+      #
+      # Helper used to process "sort" options for the provided model that are in
+      # "hash" format. Called by the public #validate_sort method above and the
+      # #validate_sort_array recursive helper below to help process "sort"
+      # options (see #validate_sort for more info).
+      #
       def validate_sort_hash(sort, model)
         sort.map do |column, type|
           Axis::Attribute::Sort.new(type, column, model)
         end
       end
 
+      #
+      # Recursively validate an "normalize" (convert into Axis:Attribute::Sort
+      # instances) an array of "sort" options for the provided model. Called by
+      # the public #validate_sort method (and itself of course) to help process
+      # "sort" options (see #validate_sort for more info).
+      #
       def validate_sort_array(sort, model)
         #
         # First try to process any 2-element arrays that may be [column, type]
@@ -365,7 +420,9 @@ module Axis
         result
       end
 
+    ############################################################################
     end # class << self
+    ############################################################################
 
   end # class Attribute
 end   # module Axis

@@ -12,10 +12,10 @@ module Axis
       #
       def axis_on(*args)
         options = args.extract_options!
-        args    = args.flatten.map { |a| a.blank? ? nil : a }.compact.uniq
+        args    = args.flatten.uniq
         args   << :index if args.empty?
         args.each do |action|
-          ::Axis::Binding.bind(self, action, options)
+          Axis::Binding.bind(self, action, options)
         end
       end
 

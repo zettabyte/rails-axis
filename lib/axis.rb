@@ -20,12 +20,86 @@ module Axis
   ##############################################################################
 
     #
+    # Convert any acceptable forms for "controller" parameters into a standard
+    # form, namely a Class instance. Returns the parameter as-is if it is
+    # already in standard form or if it is in an invalid form. This doesn't
+    # raise errors.
+    #
+    def normalize_controller(controller)
+      controller = controller.to_s if controller.is_a?(Symbol)
+      controller = controller.camelize.constantize rescue controller if controller.is_a?(String)
+      controller
+    end
+
+    #
+    # Normalize and validate any acceptable forms for "controller" parameters.
+    # If the parameter is not in a valid form that represents a controller class
+    # then an ArgumentError is raised. Otherwise, the normalized form of the
+    # parameter is returned (a Class instance for a class that has
+    # ActionController::Base as an ancestor).
+    #
+    def validate_controller(controller)
+      result = normalize_controller(controller)
+      raise ArgumentError, "invalid type for controller: #{controller.class}" unless result.is_a?(Class)
+      raise ArgumentError, "invalid controller: #{controller.name}"           unless result.ancestors.include?(ActionController::Base)
+      result
+    end
+
+    #
+    # Convert any acceptable forms for "action" parameters into a standard form,
+    # namely a string. Returns the parameter as-is if it is already a string or
+    # if it is in an invalid form. This doesn't raise errors.
+    #
+    def normalize_action(action)
+      action.is_a?(Symbol) ? action.to_s : action
+    end
+
+    #
+    # Normalize and validate any acceptable forms for "action" parameters. If
+    # the parameter is not in a valid form that represents an action (public,
+    # instance method name) on an ActionController class then an ArgumentError
+    # is raised. Otherwise, the normalized form of the parameter is returned (a
+    # string).
+    #
+    # There are two possible validations: partial and complete.
+    #
+    # ====== Partial Validation ======
+    #
+    # To do parital validation, just provide a single parameter (the action
+    # name). In this instance, only the type of the parameter (and some other
+    # simple constraints) are checked. It is not verified that any such method
+    # exists within any ActionController class (it can't since it has no such
+    # controller to check against).
+    #
+    # ====== Complete Validation ======
+    #
+    # To do complete validation, you must additionally provide a valid
+    # controller in addition to your action. The controller will be validated as
+    # a side-effect, but be aware that this will occur if you provide a
+    # controller. The controller is validated using #validate_controller above.
+    #
+    # Then, once a validated ActionController class is available and after the
+    # action has been normalized, the controller is used to ensure that the
+    # named action exists as a public instance method on the provided controller
+    # class. If not, an exception is raised.
+    #
+    def validate_action(action, controller = nil)
+      controller = validate_controller(controller) if controller
+      result     = normalize_action(action)
+      raise ArgumentError, "invalid type for action: #{action.class} (#{action})" unless result.is_a?(String)
+      raise ArgumentError, "invalid action: #{result}" unless result =~ /\A[a-z_]\w*\z/i
+      raise ArgumentError, "invalid action: #{result} (not an action method in controller: #{controller.name})" if
+        controller and !controller.action_methods.include?(result)
+      result
+    end
+
+    #
     # Convert any acceptable forms for "model" parameters into a standard form,
     # namely a Class instance. Returns the parameter as-is if it is already in
     # standard form or if it is in an invalid form. This doesn't raise errors.
     #
     def normalize_model(model)
-      model = model.to_s                              if model.is_a?(Symbol)
+      model = model.to_s if model.is_a?(Symbol)
       model = model.camelize.constantize rescue model if model.is_a?(String)
       model
     end
@@ -76,10 +150,10 @@ module Axis
     # but be aware that this will occur if you provide a model. The model is
     # validated using #validate_model above.
     #
-    # Then, once a validate ActiveRecord model class is available and after the
+    # Then, once a validated ActiveRecord model class is available and after the
     # column has been normalized, the model is used to ensure that the named
     # column exists in the table associated with the provided model. If not, an
-    # exception is raise.
+    # exception is raised.
     #
     def validate_column(column, model = nil)
       model  = validate_model(model) if model
@@ -133,6 +207,23 @@ module Axis
       raise ArgumentError, "no columns provided" if result.empty?
       result
     end
+
+    #
+    # Tries to "guess" a model given a controller. You provide a controller (as
+    # a symbol, string, or actual Class instance) and the controller's name is
+    # used to try to come up with a model class.
+    #
+    # If successful, the model Class instance is returned. Otherwise nil is
+    # returned. No exceptions are raised.
+    #
+    def model_from_controller(controller)
+      controller = validate_controller(controller) rescue nil
+      return nil unless controller
+      name   = controller.name.demodulize
+      prefix = controller.name.sub(Regexp.new(Regexp.escape(name) + "$"), "")
+      validate_model(prefix + name.underscore.sub(/_controller$/, "").classify) rescue nil
+    end
+
 
   ##############################################################################
   end # class << self

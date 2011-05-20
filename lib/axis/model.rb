@@ -271,8 +271,10 @@ module Axis
       # data. Otherwise it will create a new Axis::Attribute instance to store
       # this metadata for the attribute.
       #
-      def axis_sort_on(*args)
-        Axis::Attribute.sortable(self, *args)
+      # You may include
+      #
+      def axis_sort_on(*args, &block)
+        Axis::Attribute.sortable(self, *args, &block)
       end
 
       def axis_on(*args, &block)
