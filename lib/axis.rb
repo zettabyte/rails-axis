@@ -14,6 +14,7 @@ module Axis
   autoload :Model,      'axis/model'
   autoload :State,      'axis/state'
   autoload :Version,    'axis/version'
+  autoload :View,       'axis/view'
 
   ##############################################################################
   class << self

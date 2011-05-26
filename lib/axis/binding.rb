@@ -201,6 +201,88 @@ module Axis
       end
 
       #
+      # Public interface for searching for a specific binding on the specified
+      # controller/action pair. If there is no binding associated with the
+      # controller/action pairs, or if none of them match the provided selectors
+      # then nil is returned. Otherwise the selected binding is returned.
+      #
+      # If no selectors are provided, it is assumed you're looking for a single
+      # root binding on the controller/action. This only works if there is one
+      # and only one binding associated with the pair (else nil is returned).
+      #
+      # Otherwise, the selectors are used to "drill" down the hierarchy of
+      # bindings associated with the controller/action. At each level, a
+      # selector may be binding name (string) or a model class (Class instance).
+      # Names are the recommended technique since they are unique at each level
+      # (but it requires you to have named your bindings). Providing a model
+      # works only when, at a given level, only one binding is bound to the
+      # specified model.
+      #
+      # Another value you may be able to provide for a selector is a binding's
+      # id number. It wouldn't make sense to even use this method if you know
+      # the destination binding's id (you could just use the array-access
+      # bracket method to directly load it above). However, you may at some
+      # point need to load a binding that is a descendant of a binding for which
+      # you do have an id number.
+      #
+      # A final option is to pass "dummy" values of nil where you expect there
+      # to be just one possible binding at a given level to select from. For
+      # example, if there were a hierarhcy, 3-deep, where the root has one child
+      # and its child has just one child (so just three bindings total) then you
+      # could do the following:
+      #
+      #   load(controller, action, nil, nil, nil) => selects the grandchild
+      #   load(controller, action, nil, nil)      => selects the child
+      #   load(controller, action, nil)           => selects the root element
+      #   load(controller, action)                => also selects the root
+      #
+      # NOTE: Just remember that the above technique only works when there is
+      #       no ambiguity (just one child at the branch in question).
+      #
+      def load(controller, action, *selectors)
+        selectors.flatten!
+        result = nil
+        # Since this is a public API, validate controller/action so that we
+        # don't pollute the @associations collection...
+        begin
+          controller = Axis.normalize_controller(controller)
+          action     = Axis.validate_action(action, controller)
+        rescue ArgumentError, NameError
+          return nil
+        end
+        # Get list of root bindings and handle special cases
+        children = associations(controller, action)
+        return nil            if children.empty?
+        return nil            if selectors.empty? and children.length > 1
+        return children.first if selectors.empty?
+
+        #
+        # Drill down the hierarchy until we've no selectors left, leaving the
+        # resulting binding in "result"
+        #
+        until selectors.empty?
+          result   = nil # nuke prior iteration's result (we just use children)
+          selector = selectors.shift
+          selector = selector.to_s if selector.is_a?(Symbol)
+          selector = selector.to_i if selector.is_a?(String) and selector =~ /\A\d+\z/
+          result   = children.find { |child| child.name == selector } if selector.is_a?(String)
+          result   = self[selector] if selector.is_a?(Fixnum)
+          result   = nil unless children.include?(result)
+          unless result
+            begin
+              selector = Axis.validate_model(selector)
+              result   =        children.find  { |child| child.model == selector }
+              result   = nil if children.count { |child| child.model == selector } != 1
+            rescue ArgumentError, NameError
+            end
+          end
+          return nil unless result
+          children = result.children
+        end
+        result
+      end
+
+      #
       # Public interface for creating "bindings" or associations between a model
       # (and possibly a scoping method) and a controller's action. This is
       # done (called) by the #axis_on controller macro method that's mixed into
