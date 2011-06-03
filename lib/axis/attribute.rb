@@ -1,4 +1,5 @@
 # vim: fileencoding=utf-8:
+require 'axis/validate'
 
 module Axis
 
@@ -96,9 +97,9 @@ module Axis
     # or searchable.
     #
     def initialize(model, name, columns, type = nil)
-      @model  = Axis.validate_model(model)
+      @model  = Validate.model(model)
       @name   = self.class.validate_name(name).freeze
-      @columns = Axis.validate_columns(columns, @model).freeze
+      @columns = Validate.columns(columns, @model).freeze
       @columns.each { |c| c.freeze }
       if @columns.length == 1 and @columns.first == @name
         @literal = true
@@ -154,7 +155,7 @@ module Axis
 
     attr_reader :model   # a class inheriting from ActiveRecord::Base
     attr_reader :name    # frozen string
-    attr_reader :columns  # frozen array of frozen strings
+    attr_reader :columns # frozen array of frozen strings
     attr_reader :type    # symbol
     attr_reader :filter  # Filter instance
     attr_reader :caption # frozen string
@@ -223,7 +224,7 @@ module Axis
       #         instance.
       #
       def [](model, name = nil)
-        result = attributes[Axis.normalize_model(model)]
+        result = attributes[Normalize.model(model)]
         if name
           # model plus name lookup either gives you a reference to the
           # associated attribute or nil...
@@ -277,7 +278,7 @@ module Axis
       # state.
       #
       def load(model, *args)
-        model   = Axis.validate_model(model)
+        model   = Validate.model(model)
         options = args.extract_options!
         columns = args.flatten
         name    = validate_name(options.delete(:name)) if options.has_key?(:name)
@@ -301,7 +302,7 @@ module Axis
         #
         raise ArgumentError, "no attribute name or list of column names provided" if columns.empty?
         raise ArgumentError, "no :name option provided; required for logical attributes (having several columns)" unless name
-        columns   = Axis.validate_columns(columns, model)
+        columns   = Validate.columns(columns, model)
         result[0] = self[model, name]
 
         #
@@ -355,7 +356,7 @@ module Axis
       #
       def sortable(model, *args, &block)
         result, options = load(model, *args)
-        if options[:caption] or (result.displayable? and block)
+        if !result.displayable? or options[:caption] or block
           result.displayable(options[:caption], &block)
         end
         result.sortable(options[:sort] || true)
@@ -505,7 +506,7 @@ module Axis
       end
 
       #
-      # Recursively validate an "normalize" (convert into Axis:Attribute::Sort
+      # Recursively validate and "normalize" (convert into Axis:Attribute::Sort
       # instances) an array of "sort" options for the provided model. Called by
       # the public #validate_sort method (and itself of course) to help process
       # "sort" options (see #validate_sort for more info).

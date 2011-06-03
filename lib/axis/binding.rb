@@ -1,4 +1,7 @@
 # vim: fileencoding=utf-8:
+require 'axis/validate'
+require 'axis/util'
+
 module Axis
 
   #
@@ -122,7 +125,7 @@ module Axis
     # So, this should validate the @action member.
     #
     def validate!
-      Axis.validate_action(@action, @controller)
+      Validate.action(@action, @controller)
     end
 
     attr_reader :id     # index of this instance in class-wide binding array
@@ -245,8 +248,8 @@ module Axis
         # Since this is a public API, validate controller/action so that we
         # don't pollute the @associations collection...
         begin
-          controller = Axis.normalize_controller(controller)
-          action     = Axis.validate_action(action, controller)
+          controller = Normalize.controller(controller)
+          action     = Validate.action(action, controller)
         rescue ArgumentError, NameError
           return nil
         end
@@ -270,7 +273,7 @@ module Axis
           result   = nil unless children.include?(result)
           unless result
             begin
-              selector = Axis.validate_model(selector)
+              selector = Validate.model(selector)
               result   =        children.find  { |child| child.model == selector }
               result   = nil if children.count { |child| child.model == selector } != 1
             rescue ArgumentError, NameError
@@ -414,7 +417,7 @@ module Axis
       # indeed a valid model or parent binding as a side effect; be aware that
       # this will occur if you provide an extra parameter as it will either be
       # verified it refers to a parent binding or will be validated using the
-      # Axis.validate_model method if it doesn't (in that order).
+      # Validate.model method if it doesn't (in that order).
       #
       # Then, if you've got a valid model it is assumed we're validating the
       # scope for a root binding. The model will be used to ensure that the
@@ -429,7 +432,7 @@ module Axis
         model = parent = nil
         if model_or_parent
           parent = normalize_parent(model_or_parent)
-          model  = Axis.validate_model(model_or_parent) unless parent.is_a?(self)
+          model  = Validate.model(model_or_parent) unless parent.is_a?(self)
         end
         result = normalize_scope(scope)
         raise ArgumentError, "invalid type for scope: #{scope.class}" unless result.is_a?(String)
@@ -487,13 +490,13 @@ module Axis
         type  = options[:type]  # validate later...
         scope = options[:scope] # ditto...
         name  = validate_name(options[:name])        if options[:name]
-        model = Axis.validate_model(options[:model]) if options[:model]
+        model = Validate.model(options[:model]) if options[:model]
         if root
-          controller = Axis.validate_controller(controller)
-          action     = Axis.normalize_action(action)
+          controller = Validate.controller(controller)
+          action     = Normalize.action(action)
           assoc      = associations(controller, action)
           type     ||= (action == "index" ? :set : :single)
-          model    ||= Axis.model_from_controller(controller)
+          model    ||= Util.model_from_controller(controller)
           raise ArgumentError, "no model provided and unable to guess from controller" unless model
           if name and assoc.any? { |b| b.name == name }
             raise ArgumentError, "attempting to create two root bindings with the same name: #{name}"

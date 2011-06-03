@@ -15,7 +15,7 @@ module Axis
         args    = args.flatten.uniq
         args   << :index if args.empty?
         args.each do |action|
-          Axis::Binding.bind(self, action, options)
+          Binding.bind(self, action, options)
         end
       end
 

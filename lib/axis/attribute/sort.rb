@@ -1,5 +1,7 @@
 # vim: fileencoding=utf-8:
 require 'meta_where'
+require 'axis/validate'
+
 module Axis
   class Attribute
 
@@ -68,8 +70,8 @@ module Axis
       #
       def initialize(type, column, model)
         @type   = type.is_a?(String) ? type.downcase.strip.intern : (type == true ? :true : type)
-        @column = Axis.validate_column(column, model)
-        @model  = model # this also validated by validate_column above
+        @column = Validate.column(column, model)
+        @model  = model # this also validated by Validate.column above
         raise ArgumentError, "invalid type for type: #{type.class}" unless @type.is_a?(Symbol)
         raise ArgumentError, "invalid type: #{@type}"               unless ALIASES[@type]
         @type = ALIASES[@type] # normalize the type

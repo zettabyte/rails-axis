@@ -3,11 +3,12 @@ module Axis
   module View
 
     #
-    # TODO: debug/rewrite
     #
     def axis_table(*args)
       options = args.extract_options!
-      # binding = Axis::Binding.load(controller, action, *args)
+      binding = Binding.load(controller_name, action_name, *args)
+      raise ArgumentError, "invalid selectors" unless binding
+      "<table border='0' cellpadding='0' cellspacing='0'></table>".html_safe
     end
 
   end # module Model

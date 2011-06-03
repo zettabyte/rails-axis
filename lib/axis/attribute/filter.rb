@@ -1,4 +1,6 @@
 # vim: fileencoding=utf-8:
+require 'axis/validate'
+
 module Axis
   class Attribute
 
@@ -53,7 +55,7 @@ module Axis
       def initialize(type, attribute_type, model, options = {}, &block)
         @type           = type.is_a?(String) ? type.intern : type
         @attribute_type = Attribute.validate_type(attribute_type)
-        @model          = Axis.validate_model(model)
+        @model          = Validate.model(model)
         @block          = block
         raise ArgumentError, "invalid type for options: #{options.class}"  unless options.is_a?(Hash)
         raise ArgumentError, "invalid type for filter type: #{type.class}" unless @type.is_a?(Symbol)

@@ -11,6 +11,35 @@ module Axis
 
     module ClassMethods
 
+      def axis_on(*args, &block)
+        Attribute.create(self, *args, &block)
+      end
+      alias_method :axis_attribute_on, :axis_on
+
+      #
+      # Define a model attribute (literal or logical) as being visible by the
+      # Axis system. If the attribute already has an associate Axis::Attribute
+      # storing metadata for it, then this will just modify the existing meta-
+      # data. Otherwise it will create a new Axis::Attribute instance to store
+      # this metadata for the attribute.
+      #
+      def axis_display_on(*args, &block)
+        Attribute.displayable(self, *args, &block)
+      end
+
+      #
+      # Define a model attribute (literal or logical) as being sortable by the
+      # Axis system. If the attribute already has an associate Axis::Attribute
+      # storing metadata for it, then this will just modify the existing meta-
+      # data. Otherwise it will create a new Axis::Attribute instance to store
+      # this metadata for the attribute.
+      #
+      # You may include
+      #
+      def axis_sort_on(*args, &block)
+        Attribute.sortable(self, *args, &block)
+      end
+
       #
       # Define a model attribute (literal or logical) as being searchable by the
       # Axis system. If the attribute already has an associate Axis::Attribute
@@ -26,7 +55,7 @@ module Axis
       # One of the primary and most useful options is the :filter type option.
       # This is used by axis view helpers to determine what kind of filter UI to
       # draw and filtering options to provide on the attribute. If you don't
-      # specify a :filter option, then :filter => :default is used:
+      # specify a :filter option, then :filter => :default is used.
       #
       # The value of :filter determines what other options you may provide. For
       # example, the :set value makes the method also check if there is an
@@ -250,195 +279,8 @@ module Axis
       #   "__%% Done" => Matches "23% Done" (the 23 can be any two characters)
       #
       def axis_search_on(*args, &block)
-        Axis::Attribute.searchable(self, *args, &block)
+        Attribute.searchable(self, *args, &block)
       end
-
-      #
-      # Define a model attribute (literal or logical) as being visible by the
-      # Axis system. If the attribute already has an associate Axis::Attribute
-      # storing metadata for it, then this will just modify the existing meta-
-      # data. Otherwise it will create a new Axis::Attribute instance to store
-      # this metadata for the attribute.
-      #
-      def axis_display_on(*args, &block)
-        Axis::Attribute.displayable(self, *args, &block)
-      end
-
-      #
-      # Define a model attribute (literal or logical) as being sortable by the
-      # Axis system. If the attribute already has an associate Axis::Attribute
-      # storing metadata for it, then this will just modify the existing meta-
-      # data. Otherwise it will create a new Axis::Attribute instance to store
-      # this metadata for the attribute.
-      #
-      # You may include
-      #
-      def axis_sort_on(*args, &block)
-        Axis::Attribute.sortable(self, *args, &block)
-      end
-
-      def axis_on(*args, &block)
-        Axis::Attribute.create(self, *args, &block)
-      end
-      alias_method :axis_attribute_on, :axis_on
-
-      # Example: logical columns
-      #   # Logical because it tweaks actual search logic w/code block:
-      #   axis_search_on :registered_at do |value|
-      #     self.active.where(:yourmom => "huge", :and_has_no => values)
-      #   end
-      #   # Logical because it renames (is an alias for) a literal column:
-      #   axis_search_on :full_name, :name => :full, :filter => :pattern
-      #   # Clearly a logical column as it combines several literal columns;
-      #   # it also provides a name and type option along with a code block
-      #   # that performs the actual filtering using the user-provided values,
-      #   # all of which must be done when combining several columns.
-      #   axis_search_on :first_name, :middle_name, :last_name, :name => :full,
-      #                  :type => :string, :filter => :pattern do |pattern|
-      #     self.where("first_name LIKE :pattern OR middle_name LIKE :pattern" +
-      #                " OR last_name LIKE :pattern", :pattern => pattern)
-      #   end
-      #   # Ditto.
-      #   axis_search_on %w{ proceeds taxes }, :name => "net",
-      #                  :type => :decimal, :filter => :range do |low, high|
-      #     self.where("(proceeds - taxes) BETWEEN :low AND :high",
-      #                :low => low, :high => high)
-      #   end
-        #raise ArgumentError, "you must provide one or more literal columns" if columns.empty?
-        #name = options[:name]
-        #type = options[:type]
-        #if columns.length > 1 or name or type or block_given?
-        #  # create logical column
-        #  raise ArgumentError, "" unless name
-        #  raise ArgumentError, "" unless type
-        #else
-        #  # create wrapper around literal column
-        #  Attribute.new(self, x)
-        #end
-#      end
-
-      #
-      # Passing a block or the :name or :scope options causes all listed fields
-      # to be grouped together to make one "Search" entry.
-      #
-      # If no :name is specified, the "humanized" (where each word is also then
-      # capitalized) form of the the field name is used to create the "Search"
-      # entry.
-      #
-      # Only one search entry may exist per name: the name is the unique
-      # identifyer AND is what get displayed in the search listbox to the end
-      # user.
-      #
-      # Otherwise, a field may have several "Searches" created that search over
-      # it.
-      #
-      # You may either provide a block or the :scope option but not both.
-      #
-      # If multiple fields are to be integrated into a single search, you MUST
-      # provide either a :scope or a block that can take the search values and
-      # scope the records down. You must likewise define the search data type:
-      #
-      # Supported Search Data Types:
-      # ----------------------------
-      # :primary_key
-      # :reference
-      # :integer
-      # :float
-      # :decimal
-      # :boolean
-      # :string
-      # :text
-      # :date
-      # :time
-      # :datetime
-      # :timestamp
-      #
-      # Essentially, these are the supported rails "column" types. The column
-      # type, if the search type isn't specified, is used to determine the
-      # search type. Several of the above search types are, for the sake of
-      # searching, considered aliases and effectively behave the same. The type
-      # of the search determines what the form looks like for the search line
-      # item: what kind of form inputs, etc:
-      #
-      # :primary_key => single text field
-      # :reference   => if regular foreign key reference: single text field
-      #                 if polymorphic: two text fields (id and type)
-      # :integer     => drop-down w/ "=", "!=", "<", "<=", ">", ">="
-      #
-      # If its sortable, it should be displayed
-      # 
-
-      #
-      # Just add metadata to this model that tells axis that, for this resource
-      # (model) you ought to be displaying this "column" as defined by this call
-      # with the format/specification defined therein (unless otherwise
-      # specified by the call to the helper that renders table(s) of resources).
-      #
-        # All attributes who's values are used to build this columns value.
-        # Whether this logical column should be one of the "sortable" columns
-        # or not. You make it sortable by either passing true for :sort, in
-        # which case it will try to sort by all attributes in the order they
-        # were passed in, always ASC or DESC together, or by passing an array
-        # that defines which attributes will be involved in sorting, the order
-        # of priority of the columns, and which direction for overall ASC or
-        # DESC respectively that each attribute should sort by.
-        # Optional block used to format (and combine) the data from the one or
-        # more attributes that make up this column into a single data object to
-        # be output (DO NOT try to render into HTML or other markup here -- only
-        # transform out to a single, combined data object)
-        #
-        # Example: real attribute "first", "middle" and "last" (name). Hand-coded
-        #   attribute reader method named "name" that outputs the full name (first
-        #   middle and last combined).
-        #
-        #   For all puposes, :rev <=> :reverse, :asc <=> :ascending, and
-        #      :desc <=> :descending (alias pairs)
-        #
-        # axis_column_on :first                          # display this attribute's value in column w/header "First" (unsortable)
-        # axis_column_on :first, :sort => false          # same as above (explicitely disable sorting)
-        # axis_column_on :first, :sort => true           # same as above, enable sorting
-        # axis_column_on :first, :sort => :asc           # same as above, may only ever sort in ascending order
-        # axis_column_on :first, :sort => :desc          # same as above, may only ever sort in descending order
-        # axis_column_on :first, :sort => :rev           # same as above, always sort in reverse of requested order
-        # axis_column_on :first, :sort => [:asc]         # same as| :sort => :asc
-        # axis_column_on :first, :sort => [:desc]        # same as| :sort => :desc
-        # axis_column_on :first, :sort => [:rev]         # same as| :sort => :rev
-        # axis_column_on :first, :sort => [:asc, :asc]   # same as| :sort => :asc
-        # axis_column_on :first, :sort => [:asc, :desc]  # same as| :sort => true
-        # axis_column_on :first, :sort => [:desc, :asc]  # same as| :sort => :rev
-        # axis_column_on :first, :sort => [:desc, :desc] # same as| :sort => :desc
-        # axis_column_on :first, :name => "First Name"   # display this attribute's value in column w/header "First Name" (unsortable)
-        #
-        # axis_column_on :first, :last # display these two attribute's values (concatenated after #to_s) in column w/header "First Last" (unsortable)
-        # axis_column_on :first, :last, :name => "Full Name" # same as above but header is "Full Name"
-        # axis_column_on :first, :last, :sort => true # same as two above, sorting enabled (by :first then :last, both :asc/:desc together)
-        # axis_column_on :first, :last, :sort => :asc # same as above, may only ever sort in ascending order (both are :asc always)
-        # axis_column_on :first, :last, :sort => :rev # same as above, always sort in reverse of requested order
-        # axis_column_on :first, :last, :sort => [:asc, :asc] # same as| :sort => :asc
-        # axis_column_on :first, :last, :sort => [:last, :first] # aHa! same as| :sort => true except we sort by :last, then :first
-        # axis_column_on :first, :last, :sort => [{:last => :asc}, {:first => :rev}]
-        #   # this one sorts by the :last attribute, then the :first attribute. regardless of the sort order requested,
-        #   # it will always sort the :last attribute in ascending order. however, the :first attribute will respect the
-        #   # sort order requested but will do so in reverse (ascending when descending requested, etc).
-        # axis_column_on :first, :last, :sort => [[:last, :asc], [:first, :rev]] # same as above
-        # axis_column_on :first, :last, :sort => [[:last, :asc, :asc], {:first => :rev}] # same as above
-        #
-        # axis_column_on :first, :middle, :last, :sort => [:first, :last], :name => "Full Name" do |f, m, l|
-        #   [f, m, l].join(" ")
-        # end
-        #   # this will display the three attributes, :first, :middle, and :last as processed by the provided
-        #   # block (joined together w/a space between) in a column w/header "Full Name" that is sortable (does
-        #   # so using :first then :last attributes, both always in the requested sort order).
-        #
-        # axis_column_on :name # display result of #name by default (unsortable), column header is "Name"
-        # axis_column_on :name, :sort => [:last, :first] # you may sort by :name column, sorts first by last then first name
-        # axis_column_on :name, :sort => [:last, [:first, :asc]] # first is always ASC sort order
-        # axis_column_on :name, :sort => [:last, [:first, :asc, :desc]] # same as [:last, :first], just explicit
-        # axis_column_on :name, :sort => [:last, [:first, :desc]] # first always DESC sort order
-        # axis_column_on :name, :sort => [:last, [:first, :desc, :asc]] # first always sorted reverse of last
-        # axis_column_on :name, :sort => [[:last, :desc, :asc], :first] # last logically sorts backward of requested order while :first sorts normal
-        #
-        #
 
     end # module ClassMethods
   end   # module Model
