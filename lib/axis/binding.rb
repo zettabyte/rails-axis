@@ -7,7 +7,7 @@ module Axis
   #
   # Stores the information that links UI elements to a back-end data set.
   #
-  # Binding instances are created as the application is initialized and
+  # Binding instances are created as the application is being initialized and
   # controller class definitions are executed. They are then persisted for the
   # duration of the application and comprise part of the runtime configuration.
   #
@@ -41,17 +41,17 @@ module Axis
   # N-ary tree with the whole tree associated to the same action. An action may
   # therefor have several separate trees of bindings associated with it.
   #
-  # Bindings may optionally be given a "name" or "alias" a short, textual name
-  # (with only letters, digits, the underscore and/or hyphens; for purposes of
-  # comparison, it is case-insensitive and hyphens and underscores are treated
-  # as being identical). An alias must be unique only amongst other "sibling"
-  # bindings, such as those that all have the same parent or the set of all
-  # "root" bindings for a given action. A binding's alias makes serialized
-  # references to a specific binding more human readable. These "serialized"
-  # references may show up within query parameters in generated URLs, hence the
-  # ability to "pretty them up" a bit.
+  # Finally, every binding *must* be given a handle (a short name) that can be
+  # used when using view helpers to "select" a given binding (well, to select or
+  # create a State instance *associated* with the binding). The name can be
+  # provided as a symbol or string. It must contain only "word" characters (the
+  # "\w" regex character class) though it may also include dashes--they'll be
+  # converted to underscores internally. A handle must be unique amongst all
+  # bindings that are associated (directly as a root binding or indirectly as
+  # a child) with a given controller/action pair.
   #
   class Binding
+    include Enumerable
     private_class_method :new
 
     #
@@ -61,8 +61,8 @@ module Axis
 
     #
     # Manually create a binding with the provided type and association info.
-    # Users must call Axis::Binding.bind in order to create instances since the
-    # Axis::Binding.new method has been made private.
+    # Users must call Binding.bind in order to create instances since the
+    # Binding.new method has been made private.
     #
     # You create a child binding by providing a "parent", otherwise it will be a
     # root binding. The scope is optional for root bindings but required for
@@ -73,9 +73,9 @@ module Axis
     # The one exception to this is the "action" parameter. This doesn't validate
     # the action, but neither does the caller. Instead, the action will be
     # validated later when all bindings have #validate! called on them when the
-    # Axis::Binding class has its first official lookup request.
+    # Binding class has its first official lookup request.
     #
-    # The "type" must be one of the symbolds from the TYPES collection. The
+    # The "type" must be one of the symbols from the TYPES collection. The
     # "model" should be an ActiveRecord based model Class instance. The "scope"
     # is optional for root bindings. If provided it must be a string. On root
     # bindings that provide a scope, it must be the name of a named scope or
@@ -95,24 +95,66 @@ module Axis
     # a parent indicates a "root" binding. Therefor, you MUST NOT provide a
     # parent for root bindings (use nil) and MUST on child bindings.
     #
-    # Finally, "name" is an optional alias that you may give this binding. Since
-    # bindings are associated (not by their internal state but by where they're
-    # stored) with a specific action of a specific controller (if you're a root
-    # binding) or with a parent (if you're a child binding) and since, in each
-    # case, there may be several "sibling" bindings, an alias must be unique
-    # only amongst a binding's siblings.
+    # The "handle" must be a string and must be unique amongst all the handles
+    # for all bindings associated with the controller/action pair.
     #
-    def initialize(controller, action, type, model, name = nil, scope = nil, parent = nil)
+    def initialize(controller, action, type, model, handle, scope = nil, parent = nil)
       @controller = controller
       @action     = action
       @type       = type
       @model      = model
-      @name       = name.freeze  if name
+      @handle     = handle.freeze
       @scope      = scope.freeze if scope
       @parent     = parent
       @children   = [] # no kids yet
       @parent.adopt(self) if @parent
       register! # sets @id
+    end
+
+    #
+    # Canonical string form is combination of the controller, action, and handle
+    # names joined together.
+    #
+    def to_s
+      "#{@controller.name}##{@action}:#{@handle}"
+    end
+
+    #
+    # Our "hash"-keying function based on our canonical string representation
+    #
+    def hash
+      self.to_s.hash
+    end
+
+    #
+    # Compare "hash"-key equality based on our canonical string representation
+    #
+    def eql?(other)
+      self.to_s == other.to_s
+    end
+
+    #
+    # Compare equality based on our canonical string representation
+    #
+    def ==(other)
+      self.to_s == other.to_s
+    end
+
+    #
+    # Sort based on our canonical string representation
+    #
+    def <=>(other)
+      self.to_s <=> other.to_s
+    end
+
+    #
+    # Prettier, more useful display of instance for debugging...
+    #
+    def inspect
+      "<Binding[#{@id}](#{to_s}): " +
+      "type=#{@type}, model=#{@model.name}, scope=#{@scope || "NONE"}, " +
+      "root?=#{root? ? "true" : "false, parent=" + @parent.to_s}, " +
+      "children?=#{parent?}>"
     end
 
     #
@@ -131,7 +173,7 @@ module Axis
     attr_reader :id     # index of this instance in class-wide binding array
     attr_reader :type   # either :single or :set (one of TYPES)
     attr_reader :model  # reference to model class (Class instance)
-    attr_reader :name   # alias or human-readable name (frozen string)
+    attr_reader :handle # string used to uniquely identify binding
     attr_reader :scope  # name of scoping method (frozen string)
     attr_reader :parent # reference to another Binding instance (the parent)
 
@@ -145,6 +187,14 @@ module Axis
       @children.dup
     end
 
+    #
+    # Get an array of all descendant bindings that are either children or
+    # further descendants of this binding.
+    #
+    def descendants
+      @children.map { |child| child.descendants }.flatten
+    end
+
     def root?   ;  !@parent           end
     def child?  ; !!@parent           end
     def single? ;   @type == :single  end
@@ -155,17 +205,19 @@ module Axis
     protected
     ############################################################################
 
+    attr_reader :controller # the controller we're bound to
+    attr_reader :action     # the action (on our controller) that we're bound to
+
     #
     # Request that this binding "adopts" the provided binding as its child. This
     # updates @children only after it has been validated that the child believes
-    # this binding to be its parent and that its name, if it has one, is unique
-    # amongst any existing children.
+    # this binding to be its parent.
     #
     def adopt(child)
       raise ArgumentError, "can't adopt child binding: it doesn't believe we're the parent" unless child.parent == self
-      if child.name and @children.any? { |b| child.name == b.name }
-        raise ArgumentError, "child binding name not unique amongst siblings: #{child.name}"
-      end
+      raise ArgumentError, "can't adopt child binding: its controller doesn't match ours"   unless @controller  == child.controller
+      raise ArgumentError, "can't adopt child binding: its action doesn't match ours"       unless @action      == child.action
+      raise ArgumentError, "can't adopt child binding: its handle already in use" if self.class.assoc(controller, action).include?(child)
       @children << child
       nil # don't hand out reference to our collection of kids
     end
@@ -204,85 +256,30 @@ module Axis
       end
 
       #
-      # Public interface for searching for a specific binding on the specified
-      # controller/action pair. If there is no binding associated with the
-      # controller/action pairs, or if none of them match the provided selectors
-      # then nil is returned. Otherwise the selected binding is returned.
+      # Implement #each so we can expose an Enumerable interface over global
+      # collection of all created binding instances
       #
-      # If no selectors are provided, it is assumed you're looking for a single
-      # root binding on the controller/action. This only works if there is one
-      # and only one binding associated with the pair (else nil is returned).
-      #
-      # Otherwise, the selectors are used to "drill" down the hierarchy of
-      # bindings associated with the controller/action. At each level, a
-      # selector may be binding name (string) or a model class (Class instance).
-      # Names are the recommended technique since they are unique at each level
-      # (but it requires you to have named your bindings). Providing a model
-      # works only when, at a given level, only one binding is bound to the
-      # specified model.
-      #
-      # Another value you may be able to provide for a selector is a binding's
-      # id number. It wouldn't make sense to even use this method if you know
-      # the destination binding's id (you could just use the array-access
-      # bracket method to directly load it above). However, you may at some
-      # point need to load a binding that is a descendant of a binding for which
-      # you do have an id number.
-      #
-      # A final option is to pass "dummy" values of nil where you expect there
-      # to be just one possible binding at a given level to select from. For
-      # example, if there were a hierarhcy, 3-deep, where the root has one child
-      # and its child has just one child (so just three bindings total) then you
-      # could do the following:
-      #
-      #   load(controller, action, nil, nil, nil) => selects the grandchild
-      #   load(controller, action, nil, nil)      => selects the child
-      #   load(controller, action, nil)           => selects the root element
-      #   load(controller, action)                => also selects the root
-      #
-      # NOTE: Just remember that the above technique only works when there is
-      #       no ambiguity (just one child at the branch in question).
-      #
-      def load(controller, action, *selectors)
-        selectors.flatten!
-        result = nil
-        # Since this is a public API, validate controller/action so that we
-        # don't pollute the @associations collection...
-        begin
-          controller = Normalize.controller(controller)
-          action     = Validate.action(action, controller)
-        rescue ArgumentError, NameError
-          return nil
-        end
-        # Get list of root bindings and handle special cases
-        children = associations(controller, action)
-        return nil            if children.empty?
-        return nil            if selectors.empty? and children.length > 1
-        return children.first if selectors.empty?
+      def each(&block)
+        bindings.each(&block)
+      end
 
-        #
-        # Drill down the hierarchy until we've no selectors left, leaving the
-        # resulting binding in "result"
-        #
-        until selectors.empty?
-          result   = nil # nuke prior iteration's result (we just use children)
-          selector = selectors.shift
-          selector = selector.to_s if selector.is_a?(Symbol)
-          selector = selector.to_i if selector.is_a?(String) and selector =~ /\A\d+\z/
-          result   = children.find { |child| child.name == selector } if selector.is_a?(String)
-          result   = self[selector] if selector.is_a?(Fixnum)
-          result   = nil unless children.include?(result)
-          unless result
-            begin
-              selector = Validate.model(selector)
-              result   =        children.find  { |child| child.model == selector }
-              result   = nil if children.count { |child| child.model == selector } != 1
-            rescue ArgumentError, NameError
-            end
-          end
-          return nil unless result
-          children = result.children
-        end
-        result
+      #
+      # Retrieve a list (array) of all the "root" bindings on the controller and
+      # action pair. An empty array is returned if the parameters are invalid or
+      # there aren't any bindings for the pair.
+      #
+      def root(controller, action)
+        read_only_associations(controller, action)
+      end
+
+      #
+      # Retrieve a list (array) of ALL (both "root" and child) bindings on the
+      # controller and action pair. An empty array is returned if the parameters
+      # are invalid or there aren't any bindings for the pair.
+      #
+      def assoc(controller, action)
+        result = read_only_associations(controller, action)
+        result + result.map { |b| b.descendants }.flatten
       end
 
       #
@@ -305,27 +302,78 @@ module Axis
         create_binding(controller, action, options)
       end
 
+      ##########################################################################
+      private
+      ##########################################################################
+
       #
-      # Convert any acceptable forms for a binding's "name" parameter value into
-      # a standard form, namely a string. Returns the parameter as-is if it is
-      # already in standard form or if it is in an invalid form. This doesn't
-      # raise errors.
+      # Provide access to the class-level binding collection
       #
-      def normalize_name(name)
-        name = name.to_s if name.is_a?(Symbol)
-        name.is_a?(String) ? name.downcase.gsub(/_/, "-") : name
+      def bindings
+        @bindings ||= []
       end
 
       #
-      # Normalize and validate any acceptable forms for a binding's "name"
+      # Provide access to the class-level associations hash. This accessor gives
+      # you access only to the list of root-level bindings for the provided
+      # controller and action. Assumes parameters are valid an thus, if the
+      # associated entries don't yet exist for the controller/action, then they
+      # are created an a new, "registered" empty array is returned that the
+      # caller may use to add or register new "root" bindings.
+      #
+      def associations(controller, action)
+        @associations                     ||= {}
+        @associations[controller]         ||= {}
+        @associations[controller][action] ||= []
+      end
+
+      #
+      # This is similar to #associations above but it validates the provided
+      # controller and normalizes the action. Then, is does a passive look-up
+      # using the pair, NOT creating entries if there aren't any yet for the
+      # controller or action in their associated hashes.
+      #
+      # Finally, it returns a COPY of the array of references to all the root
+      # bindings for the controller/action pair (if they're valid and such an
+      # array exists--even if its empty still). If validation fails or either
+      # there aren't any entires for the controller or action, then an empty
+      # array is returned.
+      #
+      # Either way, at least an empty array is returned. Also, either way, the
+      # array is at best a copy so you can't use the return value to "register"
+      # entries in the associations collections. Thus, this is a "read only"
+      # version of #assoctions above.
+      #
+      def read_only_associations(controller, action)
+        controller = Validate.controller(controller) rescue nil
+        action     = Normalize.action(action)
+        return [] unless controller and action and @associations
+        return [] unless @associations[controller]
+        return [] unless @associations[controller][action]
+        @associations[controller][action].dup
+      end
+
+      #
+      # Convert any acceptable forms for a binding's "handle" parameter value
+      # into a standard form, namely a string. Returns the parameter as-is if it
+      # is already in standard form or if it is in an invalid form. This doesn't
+      # raise errors.
+      #
+      def normalize_handle(handle)
+        result = handle.is_a?(Symbol) ? handle.to_s : handle
+        result.is_a?(String) ? result.gsub(/-/, "_") : handle
+      end
+
+      #
+      # Normalize and validate any acceptable forms for a binding's "handle"
       # parameter value. If the parameter is not in a valid form then an
       # ArgumentError is raised. Otherwise, the normalized form of the parameter
       # is returned (a string).
       #
-      def validate_name(name)
-        result = normalize_name(name)
-        raise ArgumentError, "invalid type for name: #{name.class}" unless result.is_a?(String)
-        raise ArgumentError, "invalid name: #{name}" unless result =~ /\A[a-z]([a-z0-9-]*[a-z0-9])?\z/
+      def validate_handle(handle)
+        result = normalize_handle(handle)
+        raise ArgumentError, "invalid type for handle: #{handle.class}" unless result.is_a?(String)
+        raise ArgumentError, "invalid handle: #{handle}" if result =~ /[^\w]/
         result
       end
 
@@ -447,28 +495,6 @@ module Axis
         result
       end
 
-      ##########################################################################
-      private
-      ##########################################################################
-
-      #
-      # Provide access to the class-level binding collection
-      #
-      def bindings
-        @bindings ||= []
-      end
-
-      #
-      # Provide access to the class-level associations hash. This accessor gives
-      # you access only to the list of root-level bindings for the provided
-      # controller and action.
-      #
-      def associations(controller, action)
-        @associations                     ||= {}
-        @associations[controller]         ||= {}
-        @associations[controller][action] ||= []
-      end
-
       #
       # Recursive implementation of the public #bind method (Axis::Binding.bind)
       #
@@ -486,23 +512,22 @@ module Axis
       # valid.
       #
       def create_binding(controller, action, options, parent = nil)
-        root  = !parent         # is this the "root" call?
-        type  = options[:type]  # validate later...
-        scope = options[:scope] # ditto...
-        name  = validate_name(options[:name])        if options[:name]
-        model = Validate.model(options[:model]) if options[:model]
+        root   = !parent         # is this the "root" call?
+        type   = options[:type]  # validate later...
+        scope  = options[:scope] # ditto...
+        handle = validate_handle(options[:handle])
+        model  = Validate.model(options[:model]) if options[:model]
         if root
           controller = Validate.controller(controller)
           action     = Normalize.action(action)
-          assoc      = associations(controller, action)
           type     ||= (action == "index" ? :set : :single)
           model    ||= Util.model_from_controller(controller)
           raise ArgumentError, "no model provided and unable to guess from controller" unless model
-          if name and assoc.any? { |b| b.name == name }
-            raise ArgumentError, "attempting to create two root bindings with the same name: #{name}"
-          end
         else
           raise ArgumentError, "no scope provided in child-hash (require)" unless scope
+        end
+        if assoc(controller, action).any? { |b| b.handle == handle }
+          raise ArgumentError, "attempting to create two bindings with the same handle: #{handle}"
         end
         children = [] # child options sub-hashes to be processed
         type     = validate_type(type           || :single)
@@ -513,8 +538,8 @@ module Axis
         # Create this Binding and, if it is a root binding, associate it with
         # the provided controller/action...
         #
-        result = new(controller, action, type, model, name, scope, parent)
-        assoc << result if root
+        result = new(controller, action, type, model, handle, scope, parent)
+        associations(controller, action) << result if root
 
         #
         # process any :child or :children options...
