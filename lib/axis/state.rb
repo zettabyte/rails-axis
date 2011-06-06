@@ -20,6 +20,7 @@ module Axis
   # the configured key ("axis" by default).
   #
   State = Struct.new(
+    :id,       # Integer: "id" of associated Binding instance
     :total,    # Integer: total no. of resources that match our filters
     :per,      # Integer: max no. of resources to display per page
     :pages,    # Integer: total no. of pages needed to display all resources
