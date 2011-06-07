@@ -170,12 +170,14 @@ module Axis
       Validate.action(@action, @controller)
     end
 
-    attr_reader :id     # index of this instance in class-wide binding array
-    attr_reader :type   # either :single or :set (one of TYPES)
-    attr_reader :model  # reference to model class (Class instance)
-    attr_reader :handle # string used to uniquely identify binding
-    attr_reader :scope  # name of scoping method (frozen string)
-    attr_reader :parent # reference to another Binding instance (the parent)
+    attr_reader :id         # index of this instance in class-wide binding array
+    attr_reader :controller # the controller we're bound to
+    attr_reader :action     # the action (on our controller) that we're bound to
+    attr_reader :type       # either :single or :set (one of TYPES)
+    attr_reader :model      # reference to model class (Class instance)
+    attr_reader :handle     # string used to uniquely identify binding
+    attr_reader :scope      # name of scoping method (frozen string)
+    attr_reader :parent     # reference to another Binding instance (the parent)
 
     #
     # Get an array of all the child bindings belonging to this binding. The
@@ -204,9 +206,6 @@ module Axis
     ############################################################################
     protected
     ############################################################################
-
-    attr_reader :controller # the controller we're bound to
-    attr_reader :action     # the action (on our controller) that we're bound to
 
     #
     # Request that this binding "adopts" the provided binding as its child. This
@@ -280,6 +279,15 @@ module Axis
       def assoc(controller, action)
         result = read_only_associations(controller, action)
         result + result.map { |b| b.descendants }.flatten
+      end
+
+      #
+      # Retrieved the binding named "handle" that's associated with the provided
+      # controller/action pair (if any). Returns nil if there's no match.
+      #
+      def named(controller, action, handle)
+        handle = normalize_handle(handle)
+        assoc(controller, action).find { |b| b.handle == handle }
       end
 
       #
