@@ -80,7 +80,7 @@ module Axis
 
     def self.included(base)
       base.before_filter :axis_before_filter
-      base.helper_method :axis_state
+      base.helper        :axis
       base.extend ClassMethods
     end
 
