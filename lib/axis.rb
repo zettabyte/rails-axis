@@ -16,4 +16,4 @@ module Axis
   autoload :Util,       'axis/util'
 end
 
-require 'axis/railtie' if defined?(Rails::Railtie)
+require 'axis/engine' if defined?(Rails::Engine)

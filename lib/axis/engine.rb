@@ -3,7 +3,7 @@ require 'axis'
 require 'rails'
 
 module Axis
-  class Railtie < Rails::Railtie
+  class Engine < Rails::Engine
     initializer 'rails-axis' do |app|
       ActiveSupport.on_load(:active_record)     { include Axis::Model      }
       ActiveSupport.on_load(:action_view)       { include Axis::View       }
