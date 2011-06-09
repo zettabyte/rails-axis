@@ -1,4 +1,4 @@
-# vim: fileencoding=utf-8:
+# encoding: utf-8
 require 'axis'
 require 'rails'
 
@@ -8,8 +8,8 @@ module Axis
     #
     # Location of our view helpers and view templates...
     #
-    paths.app.helpers = "lib/axis/rails/helpers"
-    paths.app.views   = "lib/axis/rails/views"
+    paths.app.helpers = "rails/helpers"
+    paths.app.views   = "rails/views"
 
     #
     # Extend ActiveRecord::Base and ActionController::Base with our axis macro
