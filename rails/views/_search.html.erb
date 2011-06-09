@@ -1,0 +1,20 @@
+<div class="axis-search" id="axis-<%= binding.id %>-search">
+
+  <div class="axis-search-header">
+    <span class="axis-search-header-label">Search:</span>
+    <%= form_tag(path_for_self, :method => :get) do -%>
+      <%= select_tag "_axis[#{binding.id}][add]",
+        options_from_collection_for_select([["Name", "name"], ["Description", "desc"]], "last", "first"),
+        :include_blank => "Choose a filter..."
+        %>
+      <%= submit_tag "Add" %>
+    <% end -%>
+  </div>
+
+  <div class="axis-search-info">
+  </div>
+
+  <div class="axis-search-filters">
+  </div>
+
+</div>

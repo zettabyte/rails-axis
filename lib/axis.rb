@@ -1,4 +1,4 @@
-# vim: fileencoding=utf-8:
+# encoding: utf-8
 
 #
 # This is the base module for the Axis rails gem.

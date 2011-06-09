@@ -1,0 +1,34 @@
+<div class="axis-table" id="axis-<%= binding.id %>-table">
+  <table>
+
+    <thead>
+      <tr>
+        <th scope="col" id="axis-<%= binding.id %>-table-header"            >&nbsp;</td>
+        <th scope="col" id="axis-<%= binding.id %>-table-header-name"       >Name</th>
+        <th scope="col" id="axis-<%= binding.id %>-table-header-reviewed"   >Reviewed?</th>
+        <th scope="col" id="axis-<%= binding.id %>-table-header-category"   >Category</th>
+        <th scope="col" id="axis-<%= binding.id %>-table-header-description">Description</th>
+      </tr>
+    </thead>
+
+    <tfoot>
+      <tr>
+        <td>&nbsp;</td>
+        <td colspan="4">Pagination Stuff</td>
+      </tr>
+    </tfoot>
+
+    <tbody>
+      <% 5.times do -%>
+        <tr>
+          <td headers="axis-<%= binding.id %>-table-header"            >&nbsp;</td>
+          <td headers="axis-<%= binding.id %>-table-header-name"       >blah</td>
+          <td headers="axis-<%= binding.id %>-table-header-reviewed"   >blo</td>
+          <td headers="axis-<%= binding.id %>-table-header-category"   >blew</td>
+          <td headers="axis-<%= binding.id %>-table-header-description">blub</td>
+        </tr>
+      <% end -%>
+    </tbody>
+
+  </table>
+</div>

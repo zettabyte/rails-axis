@@ -1,4 +1,4 @@
-# vim: fileencoding=utf-8:
+# encoding: utf-8
 require 'meta_where'
 require 'axis/validate'
 

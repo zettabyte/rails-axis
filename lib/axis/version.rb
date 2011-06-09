@@ -1,4 +1,4 @@
-# vim: fileencoding=utf-8:
+# encoding: utf-8
 module Axis
   module Version
     MAJOR  = 0
