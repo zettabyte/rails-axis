@@ -140,5 +140,35 @@ module Axis
     end
     module_function :columns
 
+    #
+    # Normalize and validate any acceptable forms for integer parameters. If the
+    # parameter is no in a valid form that is either numeric (and an integer or
+    # whole part can be extracted) or a string or symbol (consisting only of
+    # digits with an optional leading sign) then an ArgumentError is raised.
+    # Otherwise, the normalized form of the parameter is returned (an Integer).
+    #
+    # You may also optionally pass a range (of integers) as a second parameter.
+    # If you do, the parameter will also be validated that it belongs within the
+    # provided range.
+    #
+    # Another option is to instead pass a single integer for the optional second
+    # parameter. If this is done, then the parameter will be validated as being
+    # greater-than or equal-to this value.
+    #
+    # There is no variation for checking *only* against a maximum value. For a
+    # maximum, you must use a range (which will also enforce a minimum).
+    #
+    def integer(arg, range_or_minimum = nil)
+      result = Normalize.integer(arg)
+      raise ArgumentError, "invalid type for an integer: #{arg.class} (#{arg})" unless result.is_a?(Integer)
+      if range_or_minimum.is_a?(Range)
+        raise ArgumentError, "invalid integer (out of range: #{range_or_minimum}): #{result}" unless range_or_minium.include?(result)
+      else
+        raise ArgumentError, "invalid integer (below minimum: #{range_or_minimum}): #{result}" unless result >= range_or_minimum
+      end
+      result
+    end
+    module_function :integer
+
   end
 end

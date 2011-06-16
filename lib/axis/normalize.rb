@@ -73,5 +73,19 @@ module Axis
     end
     module_function :columns
 
+    #
+    # Convert any acceptable forms for an integer parameter into an actual
+    # integer instance. Returns the parameter as-is if it is already an integer
+    # or if it is in an invalid form. This doesn't raise errors.
+    #
+    def integer(arg)
+      result = arg.is_a?(Symbol) ? arg.to_s : arg
+      if arg.is_a?(String)
+        result = result =~ /\A\d+\z/ ? result.to_i : result
+      end
+      result.is_a?(Numeric) ? (result.to_i rescue arg) : arg
+    end
+    module_function :integer
+
   end
 end
