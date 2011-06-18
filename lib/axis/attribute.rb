@@ -149,6 +149,7 @@ module Axis
     #
     def sortable(*sort)
       raise "cannot make an Axis::Attribute sortable until its first displayable" unless @displayable
+      sort      = sort.first unless sort.length > 1 # unwrap calls w/just one parameter out of array
       @sort     = self.class.validate_sort(sort, @model, @columns)
       @sortable = true
     end
@@ -171,6 +172,13 @@ module Axis
     def searchable?  ;  @searchable  ; end
     def displayable? ;  @displayable ; end
     def sortable?    ;  @sortable    ; end
+
+    #
+    # This is the display name used by the filter panel(s)
+    #
+    def display
+      @filter.try(:display) || @name.humanize
+    end
 
     ############################################################################
     class << self
@@ -312,9 +320,9 @@ module Axis
         #
         if result[0]
           raise ArgumentError, "provided columns list (#{columns.join(', ')}) doesn't match " +
-            "existing attribute's list: #{result[0].columns.join(', ')}" unless columns == result.columns
+            "existing attribute's list: #{result[0].columns.join(', ')}" unless columns == result[0].columns
           raise ArgumentError, "provided attribute type (#{type}) doesn't match " +
-            "existing attribute's type: #{result[0].type}" if type and type != result.type
+            "existing attribute's type: #{result[0].type}" if type and type != result[0].type
         else
           result[0]               = new(model, name, columns, type)
           attributes[model]     ||= {}

@@ -1,0 +1,43 @@
+<div class="axis-search" id="axis-<%= axis.id %>-search">
+
+  <div class="axis-search-header">
+    <span class="axis-search-header-label">Search:</span>
+    <%= form_tag(path_for_self, :method => :get) do -%>
+      <%= select_tag "axis[#{axis.id}][add]",
+        options_from_collection_for_select(axis.attributes(:search).values, :name, :display),
+        :include_blank => "Choose a filter..."
+        %>
+      <%= submit_tag "Add" %>
+    <% end -%>
+  </div>
+
+  <div class="axis-search-info">
+    <span class="axis-search-info-title">Filters:</span>
+    <%= axis.num_filters %> with <%= axis.total %> matching records out of <%= "TODO" %> total.
+  </div>
+
+  <%= form_tag(path_for_self, :method => :get) do -%>
+    <table class="axis-search-filters">
+      <% axis.filters.each_with_index do |filter, filter_id| %>
+        <tr>
+          <td><%= link_to_self "delete", :axis => { axis.id => { :del => filter_id } } %></td>
+          <td><%= filter_id == 0 ? "" : "AND" %></td>
+          <td><%= filter.display %></td>
+          <td><%= render :partial => "axis/filter/#{filter.type}", :locals => { :axis => axis, :filter => filter, :filter_id => filter_id } %></td>
+        </tr>
+      <% end -%>
+    </table>
+    <% if axis.num_filters > 0 -%>
+      <%= submit_tag "Update" %>
+      <%= submit_tag "Reset" %>
+    <% end -%>
+    <%= hidden_field_tag "axis[#{axis.id}][form]", "search" %>
+  <% end -%>
+
+</div>
+
+<pre>
+<% session.each { |k, v| %>session[<%= k.inspect %>]
+ =&gt; <%= v.inspect %>
+<% } %>
+</pre>

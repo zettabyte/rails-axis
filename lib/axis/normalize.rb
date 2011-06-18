@@ -74,6 +74,18 @@ module Axis
     module_function :columns
 
     #
+    # Convert any acceptable forms for a binding's "handle" parameter value into
+    # a standard form, namely a string. Returns the parameter as-is if it is
+    # already in standard form or if it is in an invalid form. This doesn't
+    # raise errors.
+    #
+    def handle(arg)
+      result = arg.is_a?(Symbol) ? arg.to_s : arg
+      result.is_a?(String) ? result.gsub(/-/, "_") : arg
+    end
+    module_function :handle
+
+    #
     # Convert any acceptable forms for an integer parameter into an actual
     # integer instance. Returns the parameter as-is if it is already an integer
     # or if it is in an invalid form. This doesn't raise errors.

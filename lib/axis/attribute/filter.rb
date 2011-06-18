@@ -42,8 +42,8 @@ module Axis
       # options hash, for any given type and attribute_type combination, only a
       # subset are considered valid.
       #
-      OPTIONS         = [ :not, :null, :blank, :empty, :multi, :false, :values ].freeze
-      BOOLEAN_OPTIONS = (OPTIONS -                                    [:values]).freeze
+      OPTIONS         = [ :display, :not, :null, :blank, :empty, :multi, :false, :values ].freeze
+      BOOLEAN_OPTIONS = (OPTIONS -                                              [:values]).freeze
 
       #
       # Create an Axis::Attribute::Filter instance of the specified type that
@@ -64,6 +64,11 @@ module Axis
           (options.keys - OPTIONS).map { |o| o.inspect }.join(", ") unless
           (options.keys - OPTIONS).empty?
         @attribute_type = Axis::Attribute::ALIASES[@attribute_type] # canonical
+        @display        = options.delete(:display)
+        if @display
+          raise ArgumentError, "invalid type for display: #{@display.class}" unless @display.is_a?(String)
+          @display.freeze
+        end
 
         #
         # Set up our collection of "options". All entries in this hash will be
@@ -194,6 +199,7 @@ module Axis
       attr_reader :type
       attr_reader :attribute_type
       attr_reader :model
+      attr_reader :display
 
       #
       # Since each type of filter supports different options, and since even
@@ -209,11 +215,11 @@ module Axis
       # options are "boolean" see the BOOLEAN_OPTIONS constant.
       #
       def method_missing(name, *args, &block)
-        name = name.to_s
-        if name[-1] == "?" and BOOLEAN_OPTIONS.include?(name[0..-2].intern)
-          option = name[0..-2].intern
+        option = name.to_s
+        if option.last == "?" and BOOLEAN_OPTIONS.include?(option[0..-2].intern)
+          option = option[0..-2].intern
         else
-          option = name.intern
+          option = option.intern
         end
         if @options.has_key?(option)
           @options[option]

@@ -1,0 +1,14 @@
+<% if filter.attribute_type == :string %>
+  <%= select_tag "axis[#{axis.id}][filter][#{filter_id}][type]",
+    options_for_select([
+      ["Matches", "equal"],
+      ["Starts with", "begin"],
+      ["Ends with", "end"],
+      ["Contains", "match"],
+      ["Is Blank", "blank"],
+      ["Is Unset", "unset"],
+      ["Is Empty", "empty"]
+    ])
+  %>
+<% end %>
+

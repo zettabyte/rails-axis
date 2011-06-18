@@ -6,8 +6,9 @@ module Axis
     # Render the standard search panel
     #
     def axis_search(*args, &block)
-      #render :partial => "search", :locals => { "binding" => #TODO
-      "<h4>Search</h4>".html_safe
+      options = args.extract_options!
+      handle  = args.shift || options[:handle]
+      render :partial => "axis/search", :object => controller.axis_state(handle), :as => :axis
     end
 
     #
@@ -15,7 +16,8 @@ module Axis
     #
     def axis_table(*args, &block)
       options = args.extract_options!
-      "<table border='0' cellpadding='0' cellspacing='0'></table>".html_safe
+      handle  = args.shift || options[:handle]
+      render :partial => "axis/table", :object => controller.axis_state(handle), :as => :axis
     end
 
     #

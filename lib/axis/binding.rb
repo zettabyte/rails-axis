@@ -285,9 +285,21 @@ module Axis
       # Retrieved the binding named "handle" that's associated with the provided
       # controller/action pair (if any). Returns nil if there's no match.
       #
-      def named(controller, action, handle)
-        handle = normalize_handle(handle)
-        assoc(controller, action).find { |b| b.handle == handle }
+      # If no handle is specified, tries to return the "default" binding. The
+      # "default" binding will be whichever one has a handle that matches the
+      # action name, if any (whether a root or sub-binding). If no binding has
+      # a handle that matches the action name and there is only one root binding
+      # then the root binding is the default one. Otherwise there is no default
+      # and nil is returned.
+      #
+      def named(controller, action, handle = nil)
+        handle = Normalize.handle(handle)
+        return assoc(controller, action).find { |b| b.handle == handle } if handle
+        handle = Normalize.handle(action)
+        result = assoc(controller, action).find { |b| b.handle == handle }
+        return result if result
+        result = root(controller, action)
+        result.length == 1 ? result.first : nil
       end
 
       #
@@ -359,30 +371,6 @@ module Axis
         return [] unless @associations[controller]
         return [] unless @associations[controller][action]
         @associations[controller][action].dup
-      end
-
-      #
-      # Convert any acceptable forms for a binding's "handle" parameter value
-      # into a standard form, namely a string. Returns the parameter as-is if it
-      # is already in standard form or if it is in an invalid form. This doesn't
-      # raise errors.
-      #
-      def normalize_handle(handle)
-        result = handle.is_a?(Symbol) ? handle.to_s : handle
-        result.is_a?(String) ? result.gsub(/-/, "_") : handle
-      end
-
-      #
-      # Normalize and validate any acceptable forms for a binding's "handle"
-      # parameter value. If the parameter is not in a valid form then an
-      # ArgumentError is raised. Otherwise, the normalized form of the parameter
-      # is returned (a string).
-      #
-      def validate_handle(handle)
-        result = normalize_handle(handle)
-        raise ArgumentError, "invalid type for handle: #{handle.class}" unless result.is_a?(String)
-        raise ArgumentError, "invalid handle: #{handle}" if result =~ /[^\w]/
-        result
       end
 
       #
@@ -523,7 +511,7 @@ module Axis
         root   = !parent         # is this the "root" call?
         type   = options[:type]  # validate later...
         scope  = options[:scope] # ditto...
-        handle = validate_handle(options[:handle])
+        handle = Validate.handle(options[:handle] || (root ? action : nil))
         model  = Validate.model(options[:model]) if options[:model]
         if root
           controller = Validate.controller(controller)

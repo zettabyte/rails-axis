@@ -1,7 +1,12 @@
 # encoding: utf-8
+require 'axis/core_ext/hash'
+
 module Axis
   module Controller
+
+    ############################################################################
     module ClassMethods
+    ############################################################################
 
       #
       # For each named controller action, create a binding (or full hierarchy of
@@ -16,6 +21,54 @@ module Axis
         end
       end
 
+    ############################################################################
+    end
+    ############################################################################
+
+    #
+    # Standard interface to get the hash of all the state instances, keyed by
+    # their associated binding ids (integers). Most user code, however, won't
+    # need direct access to this and should instead use #axis_state below to
+    # get the individual state instances they need to work on.
+    #
+    def axis_session
+      session["axis"] ||= {}
+    end
+
+    #
+    # Since most rendering operations are based on an axis state instance stored
+    # in the user's session which, in turn, is associated to a binding (which
+    # links to a model), this allows you to quickly get a handle to the state
+    # instance.
+    #
+    # You can either provide a handle, and id, or nothing. The handle or id must
+    # refer to an binding's handle or id, otherwise nil is returned. If the
+    # handle or id *does* refer to a binding on the current controller/action
+    # pair then the state (possibly a newly initialized one) instance associated
+    # with it for the current user's session is returned.
+    #
+    # If you don't provide a handle or id, then there must be a "default"
+    # binding. If not, nil is returned. See Binding.named for info about default
+    # bindings. If there is a default then its associated state instance is
+    # returned.
+    #
+    def axis_state(handle_or_id = nil)
+      # See if we got a binding id...
+      begin
+        id = Validate.integer(handle_or_id, 0)
+      rescue ArgumentError
+      else
+        return Binding[id] ? axis_session[id] ||= State.new(id) : nil
+      end
+      # Now we can assume they've tried to pass a binding's handle or want the
+      # default binding...
+      begin
+        handle = handle_or_id ? Validate.handle(handle_or_id) : nil
+      rescue ArgumentError
+        return nil
+      end
+      binding = Binding.named(self.class, action_name, handle)
+      binding ? axis_session[binding.id] ||= State.new(binding.id) : nil
     end
 
     ############################################################################
@@ -24,20 +77,9 @@ module Axis
 
     def axis_before_filter
       #
-      # Initialize a state instance for each binding on the form
+      # Don't do anything unless this is a request with axis updates
       #
-      @axis        = {}.with_indifferent_access # main axis interface hash
-      axis_session = session["axis"] ||= {}
-      bindings     = Binding.assoc(self.class, action_name)
-      bindings.each do |b|
-        axis_session[b.id] = State.new(b.id) unless axis_session[b.id]
-        @axis[b.handle] = @axis[b.id] = axis_session[b.id]
-      end
-
-      #
-      # Don't do anything more unless this is a request with axis updates
-      #
-      options = params.delete("axis")
+      options = params.delete(:axis).try(:deep_stringify_keys)
       return unless options.is_a?(Hash)
 
       #
@@ -47,13 +89,13 @@ module Axis
       until queue.empty?
         binding = queue.shift      # get next binding to be processed...
         queue  += binding.children # add direct children to end of queue...
-        @axis[b.id].update(options[binding.id]) # update the state
+        axis_state(binding.id).update(options[binding.id.to_s], params[:commit])
       end
     end
 
     def self.included(base)
       base.before_filter :axis_before_filter
-      base.helper Axis::UrlHelper, Axis::GuiHelper
+      base.helper "axis/url", "axis/gui"
       base.extend ClassMethods
     end
 

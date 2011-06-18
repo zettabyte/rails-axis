@@ -6,12 +6,6 @@ module Axis
   class Engine < Rails::Engine
 
     #
-    # Location of our view helpers and view templates...
-    #
-    paths.app.helpers = "rails/helpers"
-    paths.app.views   = "rails/views"
-
-    #
     # Extend ActiveRecord::Base and ActionController::Base with our axis macro
     # methods...
     #
