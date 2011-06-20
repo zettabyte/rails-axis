@@ -1,9 +1,9 @@
-<div class="axis-search" id="axis-<%= axis.id %>-search">
+<div class="axis-search" id="<%= axis_id(axis, "search") %>">
 
   <div class="axis-search-header">
     <span class="axis-search-header-label">Search:</span>
-    <%= form_tag(path_for_self, :method => :get) do -%>
-      <%= select_tag "axis[#{axis.id}][add]",
+    <%= form_tag(path_for_self) do -%>
+      <%= select_tag axis_name(axis, "add"),
         options_from_collection_for_select(axis.attributes(:search).values, :name, :display),
         :include_blank => "Choose a filter..."
         %>
@@ -31,7 +31,8 @@
       <%= submit_tag "Update" %>
       <%= submit_tag "Reset" %>
     <% end -%>
-    <%= hidden_field_tag "axis[#{axis.id}][form]", "search" %>
+    <%= hidden_field_tag axis_name(axis, "form"), "search"
+    %>
   <% end -%>
 
 </div>
