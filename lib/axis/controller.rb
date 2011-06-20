@@ -76,6 +76,8 @@ module Axis
     ############################################################################
 
     def axis_before_filter
+      routes = Rails.application.routes # so we can query the router
+
       #
       # Don't do anything unless this is a request with axis updates
       #
@@ -83,14 +85,47 @@ module Axis
       return unless options.is_a?(Hash)
 
       #
-      # Process any binding update data in binding-hierarchical order
+      # See if (A):
+      # 1. This is a POST request
+      # 2. There's another action mapped to same URL but for GET requests
+      # 3. The axis data applies to this other action
       #
-      queue = Binding.root(self.class, action_name)
+      # Then (B):
+      # 1. Apply axis data to this *other* action
+      # 2. If there's no other POST data, redirect to this other action
+      #
+      # Otherwise (C):
+      #    Just apply axis data to this action's bindings' state
+      #
+      axis_action = action_name
+      if request.post?
+        begin
+          alt_route   = routes.recognize_path(request.path, :method => :get)
+          axis_action = alt_route[:action] if alt_route[:action] != action_name
+        rescue ActionController::RoutingError
+        end
+      end
+
+      #
+      # (C & B.1) Process any binding update data in binding-hierarchical order
+      #
+      queue = Binding.root(self.class, axis_action)
       until queue.empty?
         binding = queue.shift      # get next binding to be processed...
         queue  += binding.children # add direct children to end of queue...
         axis_state(binding.id).update(options[binding.id.to_s], params[:commit])
       end
+
+      #
+      # (B.2) "If there's no other POST data..."
+      #
+      if request.post? and axis_action != action_name
+        Rails.logger.debug "\n\n\nOooh, looks like a redirect (#{params.inspect})...\n\n\n"
+        redirect_to :action => axis_action if params.reject do |k, v|
+          %w{ controller action id commit authenticity_token utf8 }.include?(k.to_s)
+        end.empty?
+      end
+
     end
 
     def self.included(base)
