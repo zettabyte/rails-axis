@@ -1,5 +1,8 @@
-<%=
-  select_tag axis_name(axis, "filter", filter_id, "type"),
-    options_for_select(Axis::State::Filter.default_type_options(filter.attribute_type))
-  %>
-<%= text_field_tag axis_name(axis, "filter", filter_id, "value") %>
+<td>
+  <%= select_tag axis_name(axis, "filter", filter_id, "type"),
+  options_for_select(filter.default_type_options, filter.selection)
+  -%>
+</td>
+<td>
+  <%= text_field_tag axis_name(axis, "filter", filter_id, "value"), filter.value -%>
+</td>

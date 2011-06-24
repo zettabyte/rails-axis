@@ -184,5 +184,46 @@ module Axis
     end
     module_function :integer
 
+    #
+    # Normalize and validate any acceptable forms for numeric parameters. If the
+    # If the parameter is not in a valid form that is either numeric or string
+    # or symbol representation of a number, then an ArgumentError is raised.
+    # Otherwise, the normalized form of the parameter is returned (a Numeric
+    # instance which may be a Fixnum, Bignum, BigDecimal, etc).
+    #
+    def numeric(arg)
+      result = Normalize.numeric(arg)
+      raise ArgumentError, "invalid type for a numeric: #{arg.class} (#{arg})" unless result.is_a?(Numeric)
+      result
+    end
+    module_function :numeric
+
+    #
+    # Normalize and validate any acceptable forms for temporal parameters. If
+    # the parameter is not in a valid form that is either a Date, Time, DateTime
+    # or a string or symbol representation of a date and/or time, then an
+    # ArgumentError is raised. Otherwise, the normalized form of the parameter
+    # is returned (a DateTime).
+    #
+    def temporal(arg)
+      result = Normalize.temporal(arg)
+      raise ArgumentError, "invalid type for a temporal: #{arg.class} (#{arg})" unless result.is_a?(DateTime)
+      result
+    end
+    module_function :temporal
+
+    #
+    # Normalize and validate any acceptable forms for boolean parameters. if the
+    # parameter is not in a valid form then an ArgumentError is raised.
+    # Otherwise, the normalized form (true or false) of the parameter is
+    # returned.
+    #
+    def boolean(arg)
+      result = Normalize.boolean(arg)
+      raise ArgumentError, "invalid type for a boolean: #{arg.class} (#{arg})" unless result.is_a?(TrueClass) or result.is_a?(FalseClass)
+      result
+    end
+    module_function :boolean
+
   end
 end

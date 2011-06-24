@@ -1,4 +1,7 @@
 # encoding: utf-8
+require 'bigdecimal'
+require 'date'
+
 module Axis
   module Normalize
 
@@ -92,12 +95,64 @@ module Axis
     #
     def integer(arg)
       result = arg.is_a?(Symbol) ? arg.to_s : arg
-      if arg.is_a?(String)
-        result = result =~ /\A\d+\z/ ? result.to_i : result
+      if result.is_a?(String)
+        result = result =~ /\A-?\d+\z/ ? result.to_i : result
       end
       result.is_a?(Numeric) ? (result.to_i rescue arg) : arg
     end
     module_function :integer
+
+    #
+    # Convert any acceptable forms for a numeric parameter into an actual
+    # Numeric instance. Returns the parameter as-is if it is already a numeric
+    # object or if it is in an invalid form. This doesn't raise errors.
+    #
+    # Okay, the above isn't entirely true, this will try to normalize all Float
+    # instances to BigDecimal instances instead.
+    #
+    def numeric(arg)
+      result = arg.is_a?(Symbol) ? arg.to_s : arg
+      result = Integer(result) rescue BigDecimal(result) rescue arg if result.is_a?(String)
+      result.is_a?(Float) ? BigDecimal(result) : result
+    end
+    module_function :numeric
+
+    #
+    # Convert any acceptable forms for a "temporal" parameter into an actual
+    # Date, DateTime, or Time instance. Returns the parameter as-is if it is
+    # already a "temporal" instance or if it is in an invalid form. This doesn't
+    # raise errors.
+    #
+    # Okay, the above isn't entirely true, this will try to normalize all Time
+    # and Date instances to DateTime instances instead.
+    #
+    def temporal(arg)
+      result = arg.is_a?(Symbol) ? arg.to_s : arg
+      result = DateTime.parse(result) rescue arg if result.is_a?(String)
+      result = result.to_datetime                if result.is_a?(Time)
+      result.is_a?(Date) ? result.to_datetime : result
+    end
+    module_function :temporal
+
+    #
+    # Convert any acceptable forms for an boolean parameter into a literal true
+    # or false value. Returns the parameter as-is if it is already a boolean or
+    # or if it is in an invalid form. This doesn't raise errors.
+    #
+    def boolean(arg)
+      result = arg.is_a?(Symbol) ? arg.to_s : arg
+      result = false if result.nil?
+      if result.is_a?(String)
+        result = case result
+        when /\A(t(rue)?|y(es)?|on|-?1)\z/i then true
+        when /\A(f(alse)?|no?|off|0)\z/i    then false
+        else ; result ; end
+      elsif result.is_a?(Numeric)
+        result = result == 0 ? false : ((result == 1 or result == -1) ? true : result)
+      end
+      result.nil? ? false : result
+    end
+    module_function :boolean
 
   end
 end

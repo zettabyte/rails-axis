@@ -9,7 +9,7 @@ module Axis
   # Each user session may have one Axis::State instance stored in their session
   # per back-end binding. The binding configures what models are bound to a
   # front-end "form" and a user's state instance stores which records are
-  # currently associated (through search filters and column ordering) and which
+  # currently associated (through search filters and column sorting) and which
   # are diplayed (pagination) as well as other user interface configuration
   # settings unique to the client.
   #
@@ -22,70 +22,16 @@ module Axis
   # the configured key ("axis" by default).
   #
   class State
-    extend Forwardable # we'll expose many or our binding's methods as our own
 
-    autoload :Order,  'axis/state/order'
+    autoload :Sort,   'axis/state/sort'
     autoload :Filter, 'axis/state/filter'
 
-    MAX_ORDER_CLAUSES = 3
+    MAX_SORT_CLAUSES = 3
 
     def initialize(id, per = 25)
       @id  = validate_id(id)
       @per = validate_per(per)
       reset
-    end
-
-    # get the actual binding instance associated with this state
-    def binding
-      Binding[@id]
-    end
-
-    #
-    # Forward the following method calls to our associated binding...
-    #
-    def_delegators :binding,
-      :controller,
-      :action,
-      :type,
-      :model,
-      :handle,
-      :scope,
-      :parent,
-      :children,
-      :descendants,
-      :root?,
-      :child?,
-      :parent?,
-      :single?,
-      :set?
-
-    #
-    # Get all the axis attribute instances associated with our model that this
-    # instance is bound to. They'll be returned in a hash with the attribute's
-    # name being the key.
-    #
-    # You may pass in an options hash in order to define what kinds of
-    # attributes you want. By default all attributes are returned. However, if
-    # you pass in an options hash (even an empty one) then only the explicitely
-    # requested attributes are returned. The following options define what types
-    # of attributes you can request:
-    #
-    #   :display => true # return displayable attribute
-    #   :search  => true # return attributes that are searchable
-    #   :sort    => true # return sortable attributes
-    #
-    def attributes(options = nil)
-      result  = Attribute[model]
-      options = options.intern      if options.is_a?(String) && %w{ display search sort }.include?(options)
-      options = { options => true } if options.is_a?(Symbol)
-      if options.is_a?(Hash)
-        result.reject! do |k, v|
-          (options[:diplay] and !v.displayable?) or
-          (options[:search] and !v.searchable? ) or
-          (options[:sort]   and !v.sortable?   )
-        end
-      end
-      result
     end
 
     attr_reader :id       # our state/binding id number
@@ -94,23 +40,8 @@ module Axis
     attr_reader :page     # which page or records we've got selected (1-based)
     attr_reader :selected # which record on current page we've got selected (1-based)
 
-    # access copy of our array: list of Order objects determining order of resources
-    def order
-      @order.dup
-    end
-
-    # access copy of our array: list of Filter objects determining displayed
-    # resources (wrapped in proxy container that joins it w/the attribute's
-    # filter instance)
-    def filters
-      attrs = attributes(:search)
-      @filters.map { |f| FilterProxy.new(attrs[f.name].filter, f) }
-    end
-
-    # helper for getting number of filters w/o running proxy-ing code in #filters
-    def num_filters
-      @filters.length
-    end
+    def sort    ; @sort    ||= [] end
+    def filters ; @filters ||= [] end
 
     # total number of pages to hold all records
     def pages
@@ -171,13 +102,13 @@ module Axis
       @selected = s
     end
 
-    # order records by the specified attribute
-    def order_by(name, descending = false)
-      new_order = Order.new(name, descending)
-      return self if @order.first == new_order
-      @order.reject! { |o| o.name == new_order.name }
-      @order.unshift(new_order)
-      @order      = @order[0, MAX_ORDER_CLAUSES]
+    # sort records by the specified attribute
+    def sort_by(name, descending = false)
+      new_sort = Sort.new(name, descending)
+      return self if @sort.first == new_sort
+      @sort.reject! { |o| o.name == new_sort.name }
+      @sort.unshift(new_sort)
+      @sort      = @sort[0, MAX_SORT_CLAUSES]
       self.offset = 0 if @total > 0
       self # this method is chainable
     end
@@ -190,9 +121,9 @@ module Axis
       self # this method is chainable
     end
 
-    # reset the order to the default (no order clauses)
-    def reset_order
-      @order = []
+    # reset the sorting to the default (no sort clauses)
+    def reset_sort
+      @sort = []
       if @total > 0
         @page     = 1
         @selected = 1
@@ -210,73 +141,8 @@ module Axis
     # reset state to original (no records yet loaded)
     def reset
       reset_filters # also calls reset_selection
-      reset_order
+      reset_sort
       self # this method is chainable
-    end
-
-    #
-    # Process axis update requests for this state instance...
-    #
-    def update(options, command = nil)
-      return self  unless options # nil is legal, we just don't do anything
-      return reset if     options == "reset"
-
-      #
-      # See if shorthand offset record selection was used...
-      #
-      #i = normalize_offset(options)
-      #if i.is_a?(Integer)
-      #  self.offset = i rescue nil
-      #end
-      #return self unless options.is_a?(Hash)
-
-      #
-      # See if there was a request to nuke a filter
-      #
-      if options[:del]
-        i = Validate.integer(options[:del], 0) rescue nil
-        if options[:del] == "all"
-          reset_filters
-        elsif i and i < @filters.length
-          @filters.delete_at(i)
-          reset_selection
-        end
-      end
-
-      #
-      # See if there was a request to add a filter
-      #
-      if options[:add]
-        attribute = attributes(:search).values.find { |a| a.name == options[:add] }
-        @filters << Filter.new(attribute.name) if attribute
-        reset_selection
-      end
-
-      #
-      # Check for filter updates
-      #
-      #if options[:filter]
-      #  if options[:filter] == "reset"
-      #    reset_filters
-      #  elsif options[:filter].is_a?(Hash)
-      #    new_filter = options[:filter].delete(:new)
-      #    filter_map = @filters.
-      #  end
-      #end
-
-      # 1. check for filter updates
-      #   b. specific filter commands:
-      #     i)   delete filter: axis[0][filter][0]=delete
-      #     ii)  update filter: axis[0][filter][0]={}
-      # 2. check for order-clause updates
-      #   a. modify active order commands: axis[0][order]=reset, =desc, =asc, =rev
-      #   b. specific order commands: ={:by => attr_name [, :dir => one of: :asc, :desc]}
-      # 3. check for page selection/navigation
-      #   a. page selection: axis[0][page]=5 / axis[0][page]=first, =last, :next, :prev, :none, :reset
-      # 4. check for record selection
-      #   a. record selection: axis[0][select]=2 / axis[0][select]=first, =last, :next, :prev, :none, :reset
-      #   b. offset selection: axis[0][offset]=0
-      self
     end
 
     ############################################################################

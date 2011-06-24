@@ -110,6 +110,7 @@ module Axis
             "doesn't match column's type: #{@type}" unless ALIASES[type] == ALIASES[@type]
         end
       else
+        type   ||= @model.columns[@columns.first].type if @columns.length == 1
         @literal = false
         @type    = self.class.validate_type(type)
       end
@@ -172,13 +173,6 @@ module Axis
     def searchable?  ;  @searchable  ; end
     def displayable? ;  @displayable ; end
     def sortable?    ;  @sortable    ; end
-
-    #
-    # This is the display name used by the filter panel(s)
-    #
-    def display
-      @filter.try(:display) || @name.humanize
-    end
 
     ############################################################################
     class << self

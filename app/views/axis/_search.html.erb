@@ -16,14 +16,18 @@
     <%= axis.num_filters %> with <%= axis.total %> matching records out of <%= "TODO" %> total.
   </div>
 
-  <%= form_tag(path_for_self, :method => :get) do -%>
+  <%= form_tag(path_for_self) do -%>
     <table class="axis-search-filters">
       <% axis.filters.each_with_index do |filter, filter_id| %>
         <tr>
           <td><%= link_to_self "delete", :axis => { axis.id => { :del => filter_id } } %></td>
           <td><%= filter_id == 0 ? "" : "AND" %></td>
           <td><%= filter.display %></td>
-          <td><%= render :partial => "axis/filter/#{filter.type}", :locals => { :axis => axis, :filter => filter, :filter_id => filter_id } %></td>
+          <td><% if filter.not? -%>
+            (<%= check_box_tag axis_name(axis, "filter", filter_id, "negate"), "1", filter.negated? %> doesn't)
+            <% else %>&nbsp;<% end -%>
+          </td>
+          <%= render :partial => "axis/filter/#{filter.type}", :locals => { :axis => axis, :filter => filter, :filter_id => filter_id } %>
         </tr>
       <% end -%>
     </table>

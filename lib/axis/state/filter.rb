@@ -8,26 +8,6 @@ module Axis
     #
     class Filter
 
-      DEFAULT_TYPES = [
-        { :value => :equal,   :string   => "Matches".freeze, :numeric => "=".freeze, :temporal => "Equal To".freeze }.freeze,
-        { :value => :begin,   :string   => "Starts With".freeze                        }.freeze,
-        { :value => :less,    :numeric  => "<".freeze                                  }.freeze,
-        { :value => :before,  :temporal => "Before".freeze                             }.freeze,
-        { :value => :end,     :string   => "Ends With".freeze                          }.freeze,
-        { :value => :greater, :numeric  => ">".freeze                                  }.freeze,
-        { :value => :after,   :temporal => "After".freeze                              }.freeze,
-        { :value => :le,      :numeric  => "<=".freeze                                 }.freeze,
-        { :value => :beon,    :temporal => "Before or On".freeze                       }.freeze,
-        { :value => :ge,      :numeric  => ">=".freeze                                 }.freeze,
-        { :value => :afon,    :temporal => "After or On".freeze                        }.freeze,
-        { :value => :match,   :string   => "Contains".freeze                           }.freeze,
-        { :value => :true,    :boolean  => "True".freeze                               }.freeze,
-        { :value => :false,   :boolean  => "False".freeze                              }.freeze,
-        { :value => :blank,   :string   => "Is Blank".freeze                           }.freeze,
-        { :value => :unset,   :string   => "Is Unset".freeze, :all => "[Unset]".freeze }.freeze,
-        { :value => :empty,   :string   => "Is Empty".freeze                           }.freeze
-      ]
-
       def initialize(name, options = nil)
         raise ArgumentError, "invalid type for options: #{options.class}" unless options.nil? or options.is_a?(Hash)
         @name    = name.to_s.freeze
@@ -44,7 +24,7 @@ module Axis
         return super(method, *args, &block) unless field =~ /\A(\w+)(=|\?)?\z/
         field = $1
         type  = $2
-        return super(method, *args, &block) unless @options.has_key?(field)
+        return super(method, *args, &block) unless @options.has_key?(field) or type == "="
         case type
         when "=" then custom_writer(field, args.first)
         when "?" then !!@options[field]
@@ -53,34 +33,21 @@ module Axis
       end
 
       def custom_writer(field, value)
+        @options[field] = validate_value(value)
+      end
+
+      def validate_value(value, allow_array = true)
         case value
-        when String then @options[field] = value.dup
-        when NilClass, TrueClass, FalseClass, Numeric, Symbol, DateTime, Date, Time
-          @options[field] = value
+        when NilClass, TrueClass, FalseClass then value
+        when Numeric                         then value
+        when Symbol                          then value
+        when String                          then value.dup
+        when DateTime, Date, Time            then value
         else
-          raise ArgumentError, "invalid type for filter attribute value: #{value.class}"
+          raise ArgumentError, "invalid type for filter attribute value: #{value.class}" unless value.is_a?(Array) and allow_array
+          value.map { |v| validate_value(v, false) }
         end
       end
-
-      ##########################################################################
-      class << self
-      ##########################################################################
-
-        def default_type_options(type)
-          legal = %w{ string numeric temporal boolean }
-          raise ArgumentError, "invalid type for type: #{type.class}" unless type.is_a?(String) or type.is_a?(Symbol)
-          raise ArgumentError, "invalid value for type: #{type}"      unless legal.include?(type.to_s)
-          type = type.intern
-          DEFAULT_TYPES.reject do |t|
-            t[type].nil? and t[:all].nil?
-          end.map do |t|
-            [t[type] || t[:all], t[:value].to_s]
-          end
-        end
-
-      ##########################################################################
-      end
-      ##########################################################################
 
     end # class Filter
   end   # class State

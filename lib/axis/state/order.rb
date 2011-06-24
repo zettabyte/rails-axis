@@ -3,9 +3,9 @@ module Axis
   class State
 
     #
-    # Instances represent an ordering preference to be stored in a State object.
+    # Instances represent an sorting preference to be stored in a State object.
     #
-    class Order
+    class Sort
       def initialize(name, descending = false)
         @name = name.to_s.freeze
         @desc = !!descending
