@@ -4,6 +4,7 @@ module Axis
     class Form
       class Filter
 
+        PARAMS        = "filter".freeze # sub-hash key (in params) for filters
         DEFAULT_TYPES = [
           { :value => :equal,   :string   => "Matches".freeze, :numeric => "=".freeze, :temporal => "Equal To".freeze }.freeze,
           { :value => :begin,   :string   => "Starts With".freeze  }.freeze,
@@ -54,6 +55,19 @@ module Axis
           @attribute = form.searchables[filter.name]
           raise ArgumentError, "invalid state filter; it's name doesn't match " +
             "any searchable attribute: #{filter.name}" unless @attribute
+          default_state # make sure State::Filter's have basic options set
+        end
+
+        #
+        # Determine this filters current "id" (the index of its associated state
+        # filter object stored in the state's filter collection). This isn't
+        # cached since it could change as filters are created and destroyed.
+        #
+        def id
+          form.filters.array.each_with_index do |f, i|
+            return i if f == @filter
+          end
+          nil # I don't have an id; I'm not in the collection!
         end
 
         attr_reader :form      # containing form
@@ -61,38 +75,83 @@ module Axis
         attr_reader :attribute # Axis::Attribute instance
 
         #
+        # Used to generate the id string, used in HTML elements (and referenced
+        # by CSS rules), for a given attribute associated with this filter. The
+        # attribute here is defined by a list of values that hierarchically
+        # define the attribute. This would be the same set of keys as passed to
+        # the #attr_name method, but we're instead generating an HTML id which
+        # is used on any/all elements, not just form controls. If no keys are
+        # specified, then the HTML id of the filter itself is returned.
+        #
+        # Examples:
+        #   filter.attr_id         => "axis-2-filter-3"
+        #   filter.attr_id("type") => "axis-2-filter-3-type"
+        #
+        def attr_id(*keys)
+          form.attr_id(*keys.unshift(PARAMS.dup, id))
+        end
+
+        #
+        # Used to generate the name, used in HTML form controls, for a given
+        # attribute associated with this filter. The attribute here is defined
+        # by a list of values that would be the sequence of keys needed to look
+        # up the attribute value in the resulting params hash.
+        #
+        # Example:
+        #   filter.attr_name("type") => "axis[2][filter][3][type]"
+        #
+        def attr_name(*keys)
+          form.attr_name(*keys.unshift(PARAMS.dup, id))
+        end
+
+        #
+        # Used to generate a hash which may be provided to URL-constructing
+        # helpers in order to create a query-string key and value that, when it
+        # is processed in a future request, will yield a params hash entry that
+        # needs the same chain (hierarchy) of keys to access the provided value.
+        #
+        # The last parameter is considered the value and all other parameters
+        # are considered part of the key chain.
+        #
+        # Example:
+        #   filter.attr_hash("type", "equal")
+        #     => { "axis" => { 2 => { "filter" => { "type" => "equal" } } } }
+        #     => "axis[2][filter]=equal"  # after helper converts to querystring
+        #   params["axis"]["2"]["filter"] # next request after user clicks link
+        #     => "equal"
+        #
+        # If the last parameter is a hash, then instead of being considered the
+        # value it will be considered a "merge" hash and the second-to-the-last
+        # parameter will be considered the value. If a "merge" hash is present,
+        # then the hash this method normally constructs will be merged with the
+        # provided "merge" hash and the result of the merge returned.
+        #
+        # The merge will favor values in the new hash this method generates over
+        # values in the "merge" if there is any conflict.
+        #
+        def attr_hash(*keys_and_value)
+          form.attr_hash(*keys_and_value.unshift(PARAMS.dup, id))
+        end
+
+        #
         # Retrieve the model this filter operates on
         #
         def model
-          @model ||= form.model
+          form.model
         end
 
         #
         # Retrieve the name of the attribute this filter operates on
         #
         def name
-          @name ||= attribute.name
+          attribute.name
         end
 
         #
         # Retrieve the display name of the attribute this filter operates on
         #
         def display
-          @display ||= attribute.filter.display || name.humanize
-        end
-
-        #
-        # Retrieve the filter type
-        #
-        def type
-          @type ||= attribute.filter.type
-        end
-
-        #
-        # Retrieve the attribute type
-        #
-        def attribute_type
-          @attribute_type ||= attribute.type
+          attribute.display
         end
 
         #
@@ -221,25 +280,38 @@ module Axis
         # Otherwise it returns false.
         #
         def apply?
-          !@state.options.empty? and @state.options.any? { |k, v| v }
+          !@filter.options.empty? and @filter.options.any? { |k, v| v }
+        end
+
+        ########################################################################
+        private
+        ########################################################################
+
+        #
+        # Make sure the referenced Axis::State::Filter instance has basic fields
+        # (options) initialized (to at least nil) given the type of attribute
+        # its associated with.
+        #
+        def default_state
+          o = @filter.options
+          @filter.value   = nil   unless opts.has_key?(:value  ) # used by all but :set filters
+          @filter.start   = nil   unless opts.has_key?(:start  ) # really only used by :range filters
+          @filter.end     = nil   unless opts.has_key?(:end    ) # really only used by :range filters
+          @filter.negated = false unless opts.has_key?(:negated) # used by most filters
+          unless o.has_key?(:selection) or (type != :default and type != :set)
+            @filter.selection = nil
+            @filter.selection = "equal" if type == :default and attribute_type != :boolean
+          end
         end
 
         #
-        # Initializes the associated state filter's attributes according to the
-        # associated attribute filter type's default state; returns self for
-        # chainability...
+        # Proxy all method calls we don't respond to first to the attribute's
+        # filter definition class, then to the state's filter class.
         #
-        def defaults
-          type = @attribute.type
-          @state.value   = nil   # used by all but :set filters
-          @state.start   = nil   # really only used by :range filters
-          @state.end     = nil   # really only used by :range filters
-          @state.negated = false # used by most filters
-          if type == :default or type == :set
-            @state.selection = nil
-            @state.selection = "equal" if type == :default and @attribute.attribute_type != :boolean
-          end
-          self
+        def method_missing(name, *args, &block)
+          begin ; return @attribute.filter.send(name, *args, &block) ; rescue NoMethodError end
+          begin ; return @filter.send(name, *args, &block)           ; rescue NoMethoderror end
+          super
         end
 
       end # class  Filter

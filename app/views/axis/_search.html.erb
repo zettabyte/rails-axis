@@ -1,10 +1,10 @@
-<div class="axis-search" id="<%= axis_id(axis, "search") %>">
+<div class="axis-search" id="<%= form.attr_id("search") %>">
 
   <div class="axis-search-header">
     <span class="axis-search-header-label">Search:</span>
     <%= form_tag(path_for_self) do -%>
-      <%= select_tag axis_name(axis, "add"),
-        options_from_collection_for_select(axis.attributes(:search).values, :name, :display),
+      <%= select_tag form.attr_name("add"),
+        options_for_select(form.available_filters),
         :include_blank => "Choose a filter..."
         %>
       <%= submit_tag "Add" %>
@@ -13,36 +13,30 @@
 
   <div class="axis-search-info">
     <span class="axis-search-info-title">Filters:</span>
-    <%= axis.num_filters %> with <%= axis.total %> matching records out of <%= "TODO" %> total.
+    <%= form.filters.length %> with <%= form.total %> matching records out of <%= form.absolute_total %> total.
   </div>
 
   <%= form_tag(path_for_self) do -%>
     <table class="axis-search-filters">
-      <% axis.filters.each_with_index do |filter, filter_id| %>
+      <% form.filters.each do |filter| %>
         <tr>
-          <td><%= link_to_self "delete", :axis => { axis.id => { :del => filter_id } } %></td>
-          <td><%= filter_id == 0 ? "" : "AND" %></td>
+          <td><%= link_to_self "delete", form.attr_hash("del", filter.id) %></td>
+          <td><%= filter.id == 0 ? "" : "AND" %></td>
           <td><%= filter.display %></td>
           <td><% if filter.not? -%>
-            (<%= check_box_tag axis_name(axis, "filter", filter_id, "negate"), "1", filter.negated? %> doesn't)
+            (<%= check_box_tag filter.attr_name("negate"), "1", filter.negated? %> doesn't)
             <% else %>&nbsp;<% end -%>
           </td>
-          <%= render :partial => "axis/filter/#{filter.type}", :locals => { :axis => axis, :filter => filter, :filter_id => filter_id } %>
+          <%= render :partial => "axis/filter/#{filter.type}", :locals => { :form => form, :filter => filter } %>
         </tr>
       <% end -%>
     </table>
-    <% if axis.num_filters > 0 -%>
+    <% if form.filters.length > 0 -%>
       <%= submit_tag "Update" %>
       <%= submit_tag "Reset" %>
     <% end -%>
-    <%= hidden_field_tag axis_name(axis, "form"), "search"
-    %>
+    <%= hidden_field_tag form.attr_name("form"),   "search"     %>
+    <%= hidden_field_tag axis.attr_name("action"),  action_name %>
   <% end -%>
 
 </div>
-
-<pre>
-<% session.each { |k, v| %>session[<%= k.inspect %>]
- =&gt; <%= v.inspect %>
-<% } %>
-</pre>

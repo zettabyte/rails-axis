@@ -1,6 +1,4 @@
 # encoding: utf-8
-require 'axis/filter_proxy'
-
 module Axis
 
   #
@@ -49,6 +47,12 @@ module Axis
       @total % @per == 0 ? result : result + 1
     end
 
+    # number of records to skip in amongst all matching records in order to get
+    # to the records of the current page
+    def page_offset
+      (@page > 0 ? @page - 1 : 0) * @per
+    end
+
     # absolute offset of current record (0-based) amongst all matching records
     def offset
       # unless we've got records and one of them selected, return nil
@@ -60,7 +64,7 @@ module Axis
     def offset=(i)
       i = validate_offset(i)
       raise ArgumentError, "cannot select record unless one or more are loaded" unless @total > 0
-      raise ArgumentError, "offset index out of range: #{i}"                   unless @total > i
+      raise ArgumentError, "offset index out of range: #{i}"                    unless @total > i
       @page     = i / @per + 1
       @selected = i % @per + 1
     end
@@ -80,7 +84,10 @@ module Axis
       if @total < 1
         @page     = 0
         @selected = 0
-      elsif @total <= offset
+        return
+      end
+      offset ||= 0 # select first record if none selected
+      if @total <= offset
         self.offset = @total - 1 # select last record
       end
     end

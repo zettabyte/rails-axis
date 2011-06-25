@@ -1,5 +1,5 @@
 <td colspan="2">
-  <%= select_tag axis_name(axis, "filter", filter_id, "value"),
+  <%= select_tag filter.attr_name("value"),
     options_for_select(filter.set_options, filter.value),
     :multiple => filter.multi?
   %>

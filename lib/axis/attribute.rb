@@ -174,6 +174,31 @@ module Axis
     def displayable? ;  @displayable ; end
     def sortable?    ;  @sortable    ; end
 
+    #
+    # This is the attribute's "display" name which is just the #humanize-ed
+    # version of it's name unless it is a searchable attribute with the :display
+    # option set, in which case that name is used instead.
+    #
+    def display
+      filter.try(:display) || name.humanize
+    end
+
+    #
+    # This is the standard technique used to render an attribute to it's desired
+    # output object. The caller, however, must provide the actual model instance
+    # that has this attribute.
+    #
+    def render(record)
+      raise ArgumentError, "record's class doens't match attribute's model: #{record.class} != #{model}" unless record.class == model
+      values = columns.map { |c| record.send(c) }
+      return values.first if columns.length == 1 and !@display
+      if @display
+        @display.call(*values)
+      else
+        values.compact.join(" ")
+      end
+    end
+
     ############################################################################
     class << self
     ############################################################################

@@ -2,14 +2,9 @@
 module Axis
   module Model
 
-    #
-    # Add our class methods too.
-    #
-    def self.included(base)
-      base.send(:extend, ClassMethods)
-    end
-
+    ############################################################################
     module ClassMethods
+    ############################################################################
 
       def axis_on(*args, &block)
         Attribute.create(self, *args, &block)
@@ -282,6 +277,16 @@ module Axis
         Attribute.searchable(self, *args, &block)
       end
 
-    end # module ClassMethods
-  end   # module Model
-end     # module Axis
+    ############################################################################
+    end
+    ############################################################################
+
+    #
+    # Add our class methods too.
+    #
+    def self.included(base)
+      base.send(:extend, ClassMethods)
+    end
+
+  end # module Model
+end   # module Axis

@@ -40,7 +40,7 @@ module Axis
     # string) to be processed, modifying the user's axis state as necessary.
     #
     def axis_before_filter
-      @axis = Axis::Session.new(self)
+      @__axis_session__ = Axis::Session.new(self)
     end
 
     #

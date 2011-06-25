@@ -1,8 +1,8 @@
 <td colspan="2">
   <% if filter.multi? -%>
-    <%= radio_button_tag axis_name(axis, "filter", filter_id, "value"), "1", filter.value? %>True<br />
-    <%= radio_button_tag axis_name(axis, "filter", filter_id, "value"), "0", filter.value == false %>False
+    <%= radio_button_tag filter.attr_name("value"), "1", filter.value? %>True<br />
+    <%= radio_button_tag filter.attr_name("value"), "0", filter.value == false %>False
   <% else -%>
-    <%= check_box_tag axis_name(axis, "filter", filter_id, "value"), "1", filter.value? %> True?
+    <%= check_box_tag filter.attr_name("value"), "1", filter.value? %> True?
   <% end -%>
 </td>
