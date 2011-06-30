@@ -1,4 +1,5 @@
-<td colspan="2">
-  Matches
+<td>Matches</td>
+<td colspan="3">
+  <%= hidden_field_tag filter.attr_name("here"), "1" %>
   <%= text_field_tag filter.attr_name("value"), filter.value %>
 </td>

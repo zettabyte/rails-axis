@@ -111,9 +111,26 @@ module Axis
     # instances to BigDecimal instances instead.
     #
     def numeric(arg)
-      result = arg.is_a?(Symbol) ? arg.to_s : arg
-      result = Integer(result) rescue BigDecimal(result) rescue arg if result.is_a?(String)
-      result.is_a?(Float) ? BigDecimal(result) : result
+      percent = false
+      result  = arg.is_a?(Symbol) ? arg.to_s : arg
+      if result.is_a?(String)
+        result = result.gsub(/[$,]/, "") # allow US currency in numerics
+        if result =~ /%\z/
+          result.sub!(/%\z/, "")
+          percent = true
+        end
+        #
+        # Just use Float() for format validation but use BigDecimal for actual
+        # conversion (since Float() is picky but floats imprecise and BigDecimal
+        # is precise but BigDecimal() is lenient)
+        #
+        begin ; Float(result)
+        rescue ArgumentError ; return arg
+        end
+        result = Integer(result) rescue BigDecimal(result) rescue arg
+      end
+      result = result.is_a?(Float) ? BigDecimal(result) : result
+      result.is_a?(Numeric) and percent ? result / BigDecimal("100.0") : result
     end
     module_function :numeric
 

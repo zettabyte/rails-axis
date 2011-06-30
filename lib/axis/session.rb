@@ -281,7 +281,7 @@ module Axis
       # the request been a GET request: redirect!
       #
       if @controller.request.post? and @action != @controller.action_name
-        @controller.redirect_to :action => @action
+        @controller.redirect_to :action => @action, :status => 303 # "See Other" redirect
       end
     end
 

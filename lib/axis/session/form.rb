@@ -19,6 +19,19 @@ module Axis
       attr_reader :record  # cached instance of currently selected record
 
       #
+      # Expects a block which will be saved and used on any subsequent calls to
+      # #render_field (above) to actually render any field for a given
+      # attribute. The provided block should expect three parameters: the
+      # associated Axis::Attribute instance (1), the current ActiveRecord
+      # instance (2), and the default-rendered value for the attribute.
+      #
+      # If, for a given call, the block doesn't return a string, then the
+      # default-rendered value (that's passed as the third parameter to the
+      # block) will be used. Otherwise the returned string will be used instead.
+      #
+      attr_accessor :table_formatter
+
+      #
       # The following just provide proxied-access to the associated members on
       # the form's binding.
       #
@@ -85,6 +98,28 @@ module Axis
       #
       def attr_hash(*keys_and_value)
         session.attr_hash(*keys_and_value.unshift(id))
+      end
+
+      #
+      # Render the attribute (assume it's one of our displayable ones) for the
+      # provided record. Uses any configured table formatting block (as provided
+      # by a call to #with_table_formatter) if present, otherwise just uses the
+      # default-rendered value.
+      #
+      def render_field(attr, record)
+        default   = attr.render(record)
+        formatted = table_formatter.call(attr, record, default) if table_formatter
+        formatted.is_a?(String) ? formatted : default
+      end
+
+      #
+      # Only display, sort, or filter by the named attributes and, when showing
+      # columns, use this ordering...
+      #
+      def mask_and_order_by(*names)
+        @attributes_mask  = names.flatten
+        @attributes_order = @attributes_mask
+        self
       end
 
       #
@@ -179,11 +214,7 @@ module Axis
       # records match our filters. This new, updated total is then returned.
       #
       def update_total
-        state.total = if parent
-          parent.record.send(scope).count
-        else
-          scope ? model.send(scope).count : model.count
-        end
+        state.total = scoped.count
       end
 
       #
@@ -198,17 +229,43 @@ module Axis
         update_total
         if state.total > 0
           state.page = 1 if page < 1
-          if parent
-            @records = parent.record.send(scope)
-          else
-            @records = scope ? model.send(scope) : model
-          end
-          @records = @records.offset(page_offset).limit(per)
+          @records = paged
           @record  = @records[selected - 1]
         else
           @records = []  # none in current page
           @record  = nil # no record selected
         end
+      end
+
+      #
+      # Returns a scope on the bound set of records with *NO* filters applied!
+      # Thus, this will include all (related) records that the raw, bound scope
+      # has access to. Use #filtered to get a scope with the filters already
+      # applied.
+      #
+      def scoped
+        if parent
+          parent.record.send(scope)
+        else
+          scope ? model.send(scope) : model
+        end
+      end
+
+      #
+      # Returns a scope on the bound set of records that has been narrowed by
+      # applying any/all filters. This should be used to actually access records
+      # for the form.
+      #
+      def filtered
+        filters.inject(scoped) { |scope, filter| filter.apply(scope) }
+      end
+
+      #
+      # Returns a filtered scope (using #filtered), limiting the scope to the
+      # current page of records.
+      #
+      def paged
+        filtered.offset(page_offset).limit(per)
       end
 
       #
@@ -271,15 +328,15 @@ module Axis
         # to the commit "command".
         #
         if options[:form] == "search"
-          if command =~ /^update$/
+          if command =~ /^update$/i
             filters_changed = false
-            changes         = options[:filter] || {}
+            changes         = options[:filter].is_a?(Hash) ? options[:filter] : {}
             filters.each_with_index do |filter, filter_id|
-              filters_changed ||= filter.update(changes[filter_id.to_s])
+              filters_changed = filter.update(changes[filter_id.to_s]) ? true : filters_changed
             end
             state.reset_selection if filters_changed
           elsif command =~ /^reset$/i
-            filters.reset unless filters.empty? or !filters.any? { |f| f.apply? }
+            filters.reset unless filters.empty?
           end
         end
 

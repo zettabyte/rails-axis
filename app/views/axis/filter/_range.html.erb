@@ -1,6 +1,7 @@
+<td>Between</td>
 <td>
-  Between <%= text_field_tag filter.attr_name("start"), filter.start %>
+  <%= hidden_field_tag filter.attr_name("here"), "1" %>
+  <%= text_field_tag filter.attr_name("start"), filter.start %>
 </td>
-<td>
-  and <%= text_field_tag filter.attr_name("end"), filter.end %>
-</td>
+<td>and</td>
+<td><%= text_field_tag filter.attr_name("end"), filter.end %></td>

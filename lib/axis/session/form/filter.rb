@@ -23,7 +23,8 @@ module Axis
           { :value => :blank,   :string   => "Is Blank".freeze,                           :only => :blank }.freeze,
           { :value => :empty,   :string   => "Is Empty".freeze,                           :only => :empty }.freeze,
           { :value => :unset,   :string   => "Is Unset".freeze, :all => "[Unset]".freeze, :only => :null  }.freeze
-        ]
+        ].freeze
+        SET_SPECIAL_TYPES = DEFAULT_TYPES.select { |t| t.has_key?(:only) }.freeze
 
         ########################################################################
         class << self
@@ -155,48 +156,142 @@ module Axis
         end
 
         #
+        # Apply this filter on the provided scope
+        #
+        def apply(scope)
+          clause = nil
+          case type
+          when :default
+
+            #
+            #
+            #
+            variation = DEFAULT_TYPES.find { |t| t[:value].to_s == filter.selection }
+            if variation
+              if attribute_type == :boolean
+                if variation[:value] == :true
+                  clause = !not? or !filter.negated # true; false if negated
+                elsif variation[:value] == :false
+                  clause = not? and filter.negated # false; true if negated
+                end
+                clause = Hash[*attribute.columns.map { |c| [c, clause] }.flatten] unless clause.nil?
+              elsif filter.value
+                case attribute_type
+                when :temporal
+                  clause = case variation[:value]
+                  when :equal  then (not? and filter.negated) ? :not_eq : :eq
+                  when :before then (not? and filter.negated) ? :gteq   : :lt
+                  when :after  then (not? and filter.negated) ? :lteq   : :gt
+                  when :beon   then (not? and filter.negated) ? :gt     : :lteq
+                  when :afon   then (not? and filter.negated) ? :lt     : :gteq
+                  else ; nil
+                  end
+                  if clause
+                    clause = Hash[*attribute.columns.map { |c| [c.intern.send(clause), filter.value] }.flatten]
+                  end
+                when :numeric
+                  clause = case variation[:value]
+                  when :equal   then (not? and filter.negated) ? :not_eq : :eq
+                  when :less    then (not? and filter.negated) ? :gteq   : :lt
+                  when :greater then (not? and filter.negated) ? :lteq   : :gt
+                  when :le      then (not? and filter.negated) ? :gt     : :lteq
+                  when :ge      then (not? and filter.negated) ? :lt     : :gteq
+                  else ; nil
+                  end
+                  if clause
+                    clause = Hash[*attribute.columns.map { |c| [c.intern.send(clause), filter.value] }.flatten]
+                  end
+                when :string
+                end
+              end
+            end
+
+          when :set
+          when :null
+          when :boolean
+          when :pattern
+          end
+
+          #
+          # Filter based on our clause, if we have one. Otherwise, return the
+          # scope unmodified...
+          #
+          clause ? scope.where(clause) : scope
+        end
+
+        #
         # Update the form's filter according to the provided "changes". Returns
         # a boolean indicating whether any changes were made or not.
         #
         def update(changes = nil)
-          return   false unless changes.is_a?(Hash) and !changes.empty?
-          result = false
+          changes ||= {}
+          result    = false
           Rails.logger.debug "\n\n\n"
-          Rails.logger.debug "Trying to update filter #{display} (attribute #{name} on model #{model.name})"
-          Rails.logger.debug "--Filter Details: #{type} filter on an #{attribute_type} attribute"
+          Rails.logger.debug "Trying to update filter '#{display}' (attribute '#{name}' on model '#{model.name}')"
+          Rails.logger.debug "--Filter Details: '#{type}' filter on '#{attribute_type}' attribute"
           Rails.logger.debug "--Existing state of filter: #{filter.options.inspect}"
           Rails.logger.debug "--Changes to apply: #{changes.inspect}"
+
           case type
           when :default
-            old_value = filter.value
-            new_value = changes[:value]
-            old_type  = DEFAULT_TYPES.find { |t| t[:value].to_s == filter.selection }
-            new_type  = DEFAULT_TYPES.find { |t| t[:value].to_s == changes[:type]   }
-            if  new_type                 and new_type != old_type       and
-              ( new_type[attribute_type]  or new_type[:all]           ) and
-              (!new_type.has_key?(:only)  or attribute.filter.options[new_type[:only]])
-              filter.selection = new_type[:value].to_s
-              if new_type[:only]
-                filter.value = new_value = old_value = nil
-                result       = true
-              elsif old_type and old_type[:only]
-                result       = true
-              else
-                result       = !!old_value
+            old_type = DEFAULT_TYPES.find { |t| t[:value].to_s == filter.selection }
+            new_type = DEFAULT_TYPES.find { |t| t[:value].to_s == changes[:type]   }
+            if attribute_type == :boolean
+              #
+              # Handle the boolean attribute-typed :default filters separately
+              #
+              if new_type != old_type
+                filter.selection = new_type ? new_type[:value].to_s : nil
+                result           = true
               end
-            end
-            if new_value.is_a?(String) and new_value != old_value and new_type and !new_type[:only]
-              begin
-                case attribute_type
-                when :numeric  then old_value, new_value = [Normalize.numeric(old_value),  Validate.numeric(new_value) ]
-                when :temporal then old_value, new_value = [Normalize.temporal(old_value), Validate.temporal(new_value)]
-                when :boolean  then old_value, new_value = [Normalize.boolean(old_value),  Validate.boolean(new_value) ]
+            else
+
+              #
+              # Preload values; we may update them when changing selection
+              #
+              old_value = filter.value
+              new_value = changes[:value]
+
+              #
+              # First update this :default-typed filter's sub-type selection...
+              #
+              if  new_type                 and new_type != old_type       and
+                ( new_type[attribute_type]  or new_type[:all]           ) and
+                (!new_type.has_key?(:only)  or attribute.filter.options[new_type[:only]])
+                filter.selection = new_type[:value].to_s
+                if new_type[:only]
+                  filter.value = new_value = old_value = nil
+                  result = true # switching to :only sub-type => nuke filter val
+                elsif old_type and old_type[:only]
+                  result = true # switching from :only sub-type requires refresh
+                else
+                  # return true (refresh recordset) if we had/have a filter
+                  # value and we switched filter types; otherwise, if there was
+                  # no filter value, then even though we changed types, there's
+                  # no impact (both the old state and new state are unapplied,
+                  # empty filters).
+                  result = !!old_value
                 end
-              rescue ArgumentError
-                new_value = old_value
               end
-              if new_value != old_value
-                filter.value = new_value.to_s
+
+              #
+              # Convert any new filter values to their native data types and
+              # update saved filter's value...
+              #
+              unless new_value.blank?
+                if attribute_type == :numeric
+                  new_value = Validate.numeric(new_value) rescue old_value
+                elsif attribute_type == :temporal
+                  begin
+                    new_value = Validate.temporal(new_value)
+                    new_value = new_value.to_date if attribute.type == :date
+                  rescue ArgumentError
+                    new_value = old_value
+                  end
+                end
+              end
+              if new_value != old_value and new_type and !new_type[:only]
+                filter.value = new_value.blank? ? nil : new_value
                 result       = true
               end
             end
@@ -205,29 +300,68 @@ module Axis
             old_value = filter.value
             new_value = changes[:value]
             if multi?
-              if new_value.is_a?(Array) and (old_value.nil? or new_value.sort != old_value.sort)
-                filter.value = new_value.sort
-                result      = true
+              if new_value.is_a?(Array)
+                new_value    = new_value.map { |i| validate_set_option(i) rescue nil }.reject { |i| i.blank? }.sort
+                result       = true if !old_value.is_a?(Array) or new_value != old_value
+                filter.value = new_value
+              elsif new_value.blank?
+                result       = true unless old_value.blank?
+                filter.value = nil
               end
             else
-              if new_value.is_a?(String) and new_value != old_value
+              new_value = validate_set_option(new_value) rescue nil
+              if new_value != old_value
                 filter.value = new_value
-                result      = true
+                result       = true
               end
             end
 
-          when :null    # TODO
-          when :boolean # TODO
-          when :pattern # TODO
-          when :range   # TODO
+          when :null
+            old_value = filter.value
+            new_value = Validate.boolean(changes[:value]) rescue nil
+            unless new_value == old_value or (multi? and new_value.nil?)
+              filter.value = new_value
+              result       = true
+            end
+
+          when :boolean
+            old_value = filter.value
+            new_value = changes[:value]
+            new_value = Validate.boolean(new_value) rescue nil unless new_value.nil?
+            unless new_value == old_value or (multi? and new_value.nil?)
+              filter.value = new_value
+              result       = true
+            end
+
+          when :pattern
+            new_value    = changes[:value]
+            new_value    = nil unless new_value.is_a?(String) and !new_value.blank?
+            result       = new_value != filter.value
+            filter.value = new_value
+
+          when :range
+            old_start = filter.start
+            old_end   = filter.end
+            if attribute_type == :numeric
+              new_start = Validate.numeric(changes[:start]) rescue old_start
+              new_end   = Validate.numeric(changes[:end])   rescue old_end
+            elsif attribute_type == :temporal
+              new_start = Validate.temporal(changes[:start]) rescue old_start
+              new_end   = Validate.temporal(changes[:end])   rescue old_end
+            end
+            if old_start != new_start or old_end != new_end
+              result = true if (old_start and old_end) or (new_start and new_end)
+              filter.start = new_start
+              filter.end   = new_end
+            end
           end
 
           #
           # Update the "negated" or "not-ed" state of the filter...
           #
           negate = Validate.boolean(changes[:negate]) rescue nil
-          unless negate.nil? or !attribute.filter.options[:not]
-            result         = true if negate != filter.negated?
+          if not?
+            result = true if negate != filter.negated?
             filter.negated = negate
           end
           result
@@ -239,18 +373,17 @@ module Axis
         # filtration (the selection field's value) to perform.
         #
         def default_type_options
-          raise ArgumentError, "invalid type of filter: #{@attribute.type}" unless @attribute.type == :default
-          type   = @attribute.attribute_type
+          raise ArgumentError, "invalid type of filter: #{type}" unless type == :default
           result = DEFAULT_TYPES.reject do |t|
-            next(true)  unless t[type] or t[:all] # omit entry if it doesn't apply to this filter type
-            next(false) unless t[:only]           # keep unless entry only applies when certain attributes present
-            begin ; !@attribute.send(t[:only])    # omit if attribute isn't set (true)
-            rescue NoMethodError ; true           # omit entry since attribute not even present
+            next(true)  unless t[attribute_type] or t[:all]
+            next(false) unless t[:only]
+            begin ; !attribute.filter.send(t[:only])
+            rescue NoMethodError ; true
             end
           end.map do |t|
-            [t[type] || t[:all], t[:value].to_s]
+            [t[attribute_type] || t[:all], t[:value].to_s]
           end
-          result.unshift(["", ""]) if type == :boolean
+          result.unshift(["", ""]) if attribute_type == :boolean
           result
         end
 
@@ -260,27 +393,37 @@ module Axis
         # values the user can filter a field by.
         #
         def set_options
-          raise ArgumentError, "invalid type of filter: #{@attribute.type}" unless @attribute.type == :set
+          raise ArgumentError, "invalid type of filter: #{type}" unless type == :set
           result  = []
-          result << ["", ""] unless @attribute.multi?
-          @attribute.values.each_with_index do |v, i|
-            result << [v, "#{i}:#{v}"]
+          result << ["", ""] unless multi?
+          values.each_with_index do |v, i|
+            result << [v, i.to_s]
           end
-          if @attribute.attribute_type == :string
-            result << ["Is Blank", "blank:"] if @attribute.blank?
-            result << ["Is Empty", "empty:"] if @attribute.empty?
+          SET_SPECIAL_TYPES.reject do |t|
+            next(true) unless t[attribute_type] or t[:all]
+            begin ; !attribute.filter.send(t[:only])
+            rescue NoMethodError ; true
+            end
+          end.each_with_index do |t, i|
+            result << [t[attribute_type] || t[:all], (i * -1 - 1).to_s]
           end
-          result << ["Is Unset", "unset:"] if @attribute.null?
           result
         end
 
-        #
-        # Returns true if this filter actually has data (in the State::Filter) such
-        # that it can be applied to actually filter out records and have an effect.
-        # Otherwise it returns false.
-        #
-        def apply?
-          !@filter.options.empty? and @filter.options.any? { |k, v| v }
+        def normalize_set_option(arg)
+          result = arg.is_a?(Symbol) ? arg.to_s : arg
+          (result.is_a?(Numeric) or (result.is_a?(String) and result =~ /\A-?\d+\z/)) ? result.to_i : result
+        end
+
+        def validate_set_option(arg)
+          result = normalize_set_option(arg)
+          range  = (0 - set_options.length)...(values.length)
+          case result
+          when Fixnum then raise ArgumentError, "invalid value for set option index: #{result}"   unless range.include?(result)
+          when String then raise ArgumentError, "invalid value for set option index: #{result}"   unless result.blank?
+          else ;           raise ArgumentError, "invalid type for set option index: #{arg.class}" unless result.nil?
+          end
+          result
         end
 
         ########################################################################
@@ -294,11 +437,11 @@ module Axis
         #
         def default_state
           o = @filter.options
-          @filter.value   = nil   unless opts.has_key?(:value  ) # used by all but :set filters
-          @filter.start   = nil   unless opts.has_key?(:start  ) # really only used by :range filters
-          @filter.end     = nil   unless opts.has_key?(:end    ) # really only used by :range filters
-          @filter.negated = false unless opts.has_key?(:negated) # used by most filters
-          unless o.has_key?(:selection) or (type != :default and type != :set)
+          @filter.value   = nil   unless o.has_key?("value"  ) # used by all but :set filters
+          @filter.start   = nil   unless o.has_key?("start"  ) # really only used by :range filters
+          @filter.end     = nil   unless o.has_key?("end"    ) # really only used by :range filters
+          @filter.negated = false unless o.has_key?("negated") # used by most filters
+          unless o.has_key?("selection") or (type != :default and type != :set)
             @filter.selection = nil
             @filter.selection = "equal" if type == :default and attribute_type != :boolean
           end
@@ -309,8 +452,8 @@ module Axis
         # filter definition class, then to the state's filter class.
         #
         def method_missing(name, *args, &block)
-          begin ; return @attribute.filter.send(name, *args, &block) ; rescue NoMethodError end
-          begin ; return @filter.send(name, *args, &block)           ; rescue NoMethoderror end
+          begin ; return @attribute.filter.send(name, *args, &block) ; rescue NoMethodError ; end
+          begin ; return @filter.send(name, *args, &block)           ; rescue NoMethodError ; end
           super
         end
 

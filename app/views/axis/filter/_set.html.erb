@@ -1,4 +1,5 @@
-<td colspan="2">
+<td colspan="4">
+  <%= hidden_field_tag filter.attr_name("here"), "1" %>
   <%= select_tag filter.attr_name("value"),
     options_for_select(filter.set_options, filter.value),
     :multiple => filter.multi?

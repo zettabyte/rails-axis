@@ -45,10 +45,14 @@ module Axis
           to_a.send(:[], *args)
         end
 
+        def empty?
+          array.empty?
+        end
+
         def delete_at(index)
           result = array.delete_at(index)
           form.state.reset_selection if result
-          result ? Filter.new(form, f) : nil # be consistent
+          result ? Filter.new(form, result) : nil # be consistent
         end
 
         #

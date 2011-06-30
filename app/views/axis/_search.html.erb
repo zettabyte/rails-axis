@@ -7,6 +7,7 @@
         options_for_select(form.available_filters),
         :include_blank => "Choose a filter..."
         %>
+      <%= hidden_field_tag axis.attr_name("action"),  action_name %>
       <%= submit_tag "Add" %>
     <% end -%>
   </div>

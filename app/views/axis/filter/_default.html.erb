@@ -1,8 +1,9 @@
 <td>
+  <%= hidden_field_tag filter.attr_name("here"), "1" %>
   <%= select_tag filter.attr_name("type"),
     options_for_select(filter.default_type_options, filter.selection)
     -%>
 </td>
-<td>
-  <%= text_field_tag filter.attr_name("value"), filter.value -%>
+<td colspan="3">
+  <%= (filter.attribute_type != :boolean ? text_field_tag(filter.attr_name("value"), filter.value) : "&nbsp;".html_safe) -%>
 </td>

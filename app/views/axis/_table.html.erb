@@ -24,7 +24,7 @@
         <tr>
           <td headers="<%= form.attr_id("table", "header") %>">&nbsp;</td>
           <% form.displayables.each do |name, attr| -%>
-            <td headers="<%= form.attr_id("table", "header", name) %>"><%= attr.render(record) %></td>
+            <td headers="<%= form.attr_id("table", "header", name) %>"><%= form.render_field(attr, record) %></td>
           <% end -%>
         </tr>
       <%- end %>
