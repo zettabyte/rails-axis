@@ -4,51 +4,48 @@ module Axis
 
     #
     # Represents an individual record-filtration clause to be stored in a state
-    # object.
+    # object. Don't create instances of this class directly, instead use on of
+    # the subclasses that are namespaced below this class (and stored in the
+    # "./filter" sub-directory).
     #
     class Filter
 
-      def initialize(name, options = nil)
-        raise ArgumentError, "invalid type for options: #{options.class}" unless options.nil? or options.is_a?(Hash)
+      autoload :Boolean, 'axis/state/filter/boolean'
+      autoload :Default, 'axis/state/filter/default'
+      autoload :Null,    'axis/state/filter/null'
+      autoload :Pattern, 'axis/state/filter/pattern'
+      autoload :Range,   'axis/state/filter/range'
+      autoload :Set,     'axis/state/filter/set'
+
+      def initialize(name)
         @name    = name.to_s.freeze
-        @options = options ? options.deep_clone : {}
+        @negated = false
       end
 
-      attr_reader :name # associated attribute name (literal or logical)
-      attr_reader :options
+      # Name of model's attribute associated with this filter.
+      attr_reader :name
 
-      private
+      # If true, the meaning of this filter is negated as a whole.
+      attr_accessor           :negated
+      alias_method :negated?, :negated
 
-      def method_missing(method, *args, &block)
-        field = method.to_s
-        return super(method, *args, &block) unless field =~ /\A(\w+)(=|\?)?\z/
-        field = $1
-        type  = $2
-        return super(method, *args, &block) unless @options.has_key?(field) or type == "="
-        case type
-        when "=" then custom_writer(field, args.first)
-        when "?" then !!@options[field]
-        else        ;   @options[field]
+      ##########################################################################
+      class << self
+      ##########################################################################
+
+        #
+        # Create a new instance of one of the Filter class's sub-classes and
+        # return it.
+        #
+        def create(name, filter)
+          klass = "#{self.class.nesting[1]}::#{filter.type.to_s.classify}".constantize
+          klass.new(name)
         end
-      end
 
-      def custom_writer(field, value)
-        @options[field] = validate_value(value)
+      ##########################################################################
       end
+      ##########################################################################
 
-      def validate_value(value, allow_array = true)
-        case value
-        when NilClass, TrueClass, FalseClass then value
-        when Numeric                         then value
-        when Symbol                          then value
-        when String                          then value.dup
-        when DateTime, Date, Time            then value
-        else
-          raise ArgumentError, "invalid type for filter attribute value: #{value.class}" unless value.is_a?(Array) and allow_array
-          value.map { |v| validate_value(v, false) }
-        end
-      end
-
-    end # class Filter
-  end   # class State
+    end # class  Filter
+  end   # class  State
 end     # module Axis
