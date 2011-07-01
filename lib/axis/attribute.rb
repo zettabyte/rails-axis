@@ -116,7 +116,7 @@ module Axis
       end
       @filter      = nil # when searchable, an Axis::Attribute::Filter instance
       @caption     = nil # when displayable, string (attribute's display name)
-      @display     = nil # when displayable, block of code (or still nil)
+      @renderer    = nil # when displayable, block of code (or still nil)
       @sort        = nil # when sortable, array of Sort instances
       @searchable  = false
       @displayable = false
@@ -140,7 +140,7 @@ module Axis
     #
     def displayable(caption = nil, &block)
       @caption     = caption ? self.class.validate_caption(caption).freeze : @name.titleize.freeze
-      @display     = block
+      @renderer    = block
       @displayable = true
     end
 
@@ -189,11 +189,11 @@ module Axis
     # that has this attribute.
     #
     def render(record)
-      raise ArgumentError, "record's class doens't match attribute's model: #{record.class} != #{model}" unless record.class == model
+      raise ArgumentError, "record's class doesn't match attribute's model: #{record.class} != #{model}" unless record.class == model
       values = columns.map { |c| record.send(c) }
-      return values.first if columns.length == 1 and !@display
-      if @display
-        @display.call(*values)
+      return values.first if columns.length == 1 and !@renderer
+      if @renderer
+        @renderer.call(*values)
       else
         values.compact.join(" ")
       end
@@ -582,5 +582,5 @@ module Axis
     end # class << self
     ############################################################################
 
-  end # class Attribute
+  end # class  Attribute
 end   # module Axis
