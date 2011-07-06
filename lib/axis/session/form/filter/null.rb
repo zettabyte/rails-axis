@@ -4,14 +4,7 @@ module Axis
     class Form
       class Filter
         class Null
-
-          #
-          # Apply this filter on the provided scope
-          #
-          def apply(scope)
-              field = (negated? ^ null?) ? :field : :field.not_eq
-              scope.where(field => nil)
-          end
+          private
 
           #
           # Generate a hash representing an individual sql WHERE-clause (using
@@ -22,14 +15,18 @@ module Axis
           #
           def where_clause(column)
             return nil unless apply?
-            if non_true?
-              # when value is false, instead of searching for false, search for
-              # those that don't equal true...
-              column = column.intern.send((negated? ^ value?) ? :eq : :not_eq)
-              { column => true }
-            else
-              # simple filter searching for an explicit true or false
-              { column => (negated? ^ value?) }
+            match_null = negated? ^ value?
+            column     = column.intern
+            column     = column.not_eq unless match_null # pre-apply negation
+            case
+            when use_null?  then { column => nil }
+            when use_empty? then { column => ""  }
+            when use_blank?
+              if match_null
+                { column => nil } | { column => "" }
+              else
+                { column => nil } & { column => "" } # column already #not_eq
+              end
             end
           end
 
@@ -55,22 +52,6 @@ module Axis
           def initial_defaults
             # Immediately enable this filter if it's checkbox-style
             value = false if checkbox?
-          end
-
-          #
-          # Update the form's filter according to the provided "changes". Returns
-          # a boolean indicating whether any changes were made or not.
-          #
-          def update(changes = nil)
-            result   = false
-            new_null = changes[:null]             rescue nil
-            new_null = Validate.boolean(new_null) rescue nil unless new_null.nil?
-            unless new_null == null? or (multi? and new_null.nil?)
-              null   = new_null
-              result = true
-            end
-            # Call the super-class implementation to do any common work
-            super ? true : result
           end
 
         end # class  Null

@@ -6,51 +6,81 @@ module Axis
         class Range
 
           #
-          # Apply this filter on the provided scope
+          # This gets a formatted, displayable string version of #first. It will
+          # apply any custom formatter for the filter value.
           #
-          def apply(scope)
-            if apply?
-              scope.where(:field => (negated? ^ true?))
-            else
-              scope
-            end
+          # TODO: implement custom formatter block (in attribute filter def.) to
+          #       control how #first and #last data-type values get formatted to
+          #       strings...
+          #
+          def rendered_first
+            first.to_s
+          end
+
+          #
+          # This gets a formatted, displayable string version of #last. It will
+          # apply any custom formatter for the filter value.
+          #
+          # TODO: implement custom formatter block (in attribute filter def.) to
+          #       control how #first and #last data-type values get formatted to
+          #       strings...
+          #
+          def rendered_last
+            last.to_s
+          end
+
+          private
+
+          #
+          # Generate a hash representing an individual sql WHERE-clause (using
+          # the MetaWhere gem features) for this filter on the provided column
+          # name.
+          #
+          # If the filter doesn't apply then just return nil.
+          #
+          def where_clause(column)
+            return nil unless apply?
+            result = { column => first..last }
+            negated? ? -result : result
           end
 
           #
           # Update the form's filter according to the provided "changes". Returns
           # a boolean indicating whether any changes were made or not.
           #
-          def update(changes = nil)
-            result   = false
-            source   = changes.is_a?(Hash) ? changes.dup : {}
-            new_true = source[:true]
-            new_true = Validate.boolean(new_true) rescue nil unless new_true.nil?
-            unless new_true == true? or (multi? and new_true.nil?)
-              self.true = new_true
-              result    = true
-            end
-            # Call the super-class implementation to do any common work
-            super ? true : result
+          def private_update(changes)
+            new_first = process_input(changes[:first])
+            new_last  = process_input(changes[:last])
+            result    = new_first != first
+            result  ||= new_last  != last
+            first     = new_first
+            last      = new_last
+            result
           end
 
-
-          when :range
-            old_start = state.start
-            old_end   = state.end
+          #
+          # Utility method used by #private_update to convert an input string
+          # into a data object of a type appropriate for the filter's attribute-
+          # type.
+          #
+          def process_input(val)
             if attribute_type == :numeric
-              new_start = Validate.numeric(changes[:start]) rescue old_start
-              new_end   = Validate.numeric(changes[:end])   rescue old_end
-            elsif attribute_type == :temporal
-              new_start = Validate.temporal(changes[:start]) rescue old_start
-              new_end   = Validate.temporal(changes[:end])   rescue old_end
-            end
-            if old_start != new_start or old_end != new_end
-              result = true if (old_start and old_end) or (new_start and new_end)
-              state.start = new_start
-              state.end   = new_end
+              Validate.numeric(val) rescue nil
+            else # attribute_type == :temporal
+              tmp = Validate.temporal(val) rescue nil
+              tmp and attribute.type == :date ? tmp.to_date : tmp
             end
           end
 
+          #
+          # After a new state filter is created it might not have the best set
+          # of default values since it isn't aware of the associated attribute's
+          # settings. This is called when the state filter is first constructed
+          # and "wrapped" by the session filter to set up these context-aware
+          # defaults.
+          #
+          def initial_defaults
+          end
 
         end # class  Range
       end   # class  Filter

@@ -5,16 +5,76 @@ module Axis
       class Filter
         class Set
 
-        SET_SPECIAL_TYPES = DEFAULT_TYPES.select { |t| t.has_key?(:only) }.freeze
+          #         
+          # Return an array (of two-element arrays) containing the appropriate
+          # list of values and display names for this type of set filter.
+          #         
+          def options
+            result  = []
+            result << ["", ""] unless multiple?
+            ordering.each_with_index do |v, i|
+              result << [values.is_a?(Hash) ? values[v] : v, i]
+            end
+            SPECIALS.each do |s|
+              next unless self.send("include_#{s}?")
+              result << [SPECIAL_LABELS[s], SPECIAL_VALUES[s]]
+            end
+            result
+          end
+
+          private
 
           #
-          # Apply this filter on the provided scope
+          # Generate a hash representing an individual sql WHERE-clause (using
+          # the MetaWhere gem features) for this filter on the provided column
+          # name.
           #
-          def apply(scope)
-            if apply?
-              scope.where(:field => (negated? ^ true?))
-            else
-              scope
+          # If the filter doesn't apply then just return nil.
+          #
+          def where_clause(column)
+            return nil unless apply?
+            column = column.intern
+            if list?
+              selected.reduce do |result, index|
+                sub_clause = where_sub_clause(column, index)
+                if sub_clause
+                  negated? ? (result & sub_clause) : (result | sub_clause)
+                else
+                  result # just pass current result on through...
+                end
+              end
+            else # single selection from set of values
+              where_sub_clause(column, selected)
+            end
+          end
+
+          #
+          # Utility helper used by #where_clause to construct an individual sub-
+          # clause that will be be combined with other sub-clauses to build the
+          # full where clause. The provided index is the selected element to
+          # either match or not match (if negated).
+          #
+          # The column will have already been converted to a symbol.
+          #
+          def where_sub_clause(column, index)
+            index  = validate_selected_index(index) rescue nil
+            column = column.not_eq if negated? # pre-apply negation
+            return nil unless index
+            if index < 0
+              case index
+              when SPECIAL_VALUES[:null]  then { column => nil }
+              when SPECIAL_VALUES[:empty] then { column => ""  }
+              when SPECIAL_VALUES[:blank]
+                if negated?
+                  { column => nil } & { column => "" } # column already #not_eq
+                else
+                  { column => nil } | { column => "" }
+                end
+              end
+            else # index >= 0
+              value = ordering[index]
+              value = values[value] if values.is_a?(Hash)
+              { column => value } # column pre-negated
             end
           end
 
@@ -22,78 +82,43 @@ module Axis
           # Update the form's filter according to the provided "changes". Returns
           # a boolean indicating whether any changes were made or not.
           #
-          def update(changes = nil)
-            result   = false
-            source   = changes.is_a?(Hash) ? changes.dup : {}
-            new_true = source[:true]
-            new_true = Validate.boolean(new_true) rescue nil unless new_true.nil?
-            unless new_true == true? or (multi? and new_true.nil?)
-              self.true = new_true
-              result    = true
-            end
-            # Call the super-class implementation to do any common work
-            super ? true : result
-          end
-
-          when :set
-            old_value = state.value
-            new_value = changes[:value]
-            if multi?
-              if new_value.is_a?(Array)
-                new_value    = new_value.map { |i| validate_set_option(i) rescue nil }.reject { |i| i.blank? }.sort
-                result       = true if !old_value.is_a?(Array) or new_value != old_value
-                state.value = new_value
-              elsif new_value.blank?
-                result       = true unless old_value.blank?
-                state.value = nil
-              end
+          def private_update(changes)
+            new_selected = changes[:selected]
+            if new_selected.is_a?(Array)
+              new_selected = new_selected.map { |i| validate_selected_index(i) rescue nil }.compact.sort
+              new_selected = nil if new_selected.empty? or !multiple?
             else
-              new_value = validate_set_option(new_value) rescue nil
-              if new_value != old_value
-                state.value = new_value
-                result       = true
-              end
+              new_selected = validate_selected_index(new_selected) rescue nil
             end
-
-        #         
-        # Return an array (of two-element arrays) containing the appropriate list of
-        # values and display names for a filter, of type :set, for the list of legal
-        # values the user can filter a field by.
-        #         
-        def set_options
-          raise ArgumentError, "invalid type of filter: #{type}" unless type == :set
-          result  = [] 
-          result << ["", ""] unless multi? 
-          values.each_with_index do |v, i| 
-            result << [v, i.to_s]
-          end     
-          SET_SPECIAL_TYPES.reject do |t|
-            next(true) unless t[attribute_type] or t[:all] 
-            begin ; !attribute.filter.send(t[:only])
-            rescue NoMethodError ; true
-            end 
-          end.each_with_index do |t, i|
-            result << [t[attribute_type] || t[:all], (i * -1 - 1).to_s]
+            result   = new_selected = selected
+            selected = new_selected
+            result
           end
-          result
-        end
 
-        def normalize_set_option(arg)
-          result = arg.is_a?(Symbol) ? arg.to_s : arg
-          (result.is_a?(Numeric) or (result.is_a?(String) and result =~ /\A-?\d+\z/)) ? result.to_i : result
-        end
-        
-        def validate_set_option(arg)
-          result = normalize_set_option(arg)
-          range  = (0 - set_options.length)...(values.length)
-          case result
-          when Fixnum then raise ArgumentError, "invalid value for set option index: #{result}"   unless range.include?(result)
-          when String then raise ArgumentError, "invalid value for set option index: #{result}"   unless result.blank?
-          else ;           raise ArgumentError, "invalid type for set option index: #{arg.class}" unless result.nil?
+          #
+          # After a new state filter is created it might not have the best set
+          # of default values since it isn't aware of the associated attribute's
+          # settings. This is called when the state filter is first constructed
+          # and "wrapped" by the session filter to set up these context-aware
+          # defaults.
+          #
+          def initial_defaults
           end
-          result
-        end
 
+          #
+          # Custom validator for a selected index value.
+          #
+          def validate_selected_index(arg)
+            result = Normalize.integer(arg)
+            raise ArgumentError, "invalid type for set filter index: #{arg.class}" unless result.is_a?(Fixnum)
+            if result < 0
+              raise ArgumentError, "invalid 'special' index value for set filter: #{result}" unless
+                SPECIAL_VALUES.values.include?(result)
+            else # result >= 0
+              raise ArgumentError, "invalid index value for set filter: #{result}" unless result < ordering.length
+            end
+            result
+          end
 
         end # class  Set
       end   # class  Filter

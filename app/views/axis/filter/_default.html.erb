@@ -1,9 +1,10 @@
 <td>
-  <%= hidden_field_tag filter.attr_name("here"), "1" %>
-  <%= select_tag filter.attr_name("type"),
-    options_for_select(filter.default_type_options, filter.selection)
-    -%>
+  <%= select_tag filter.attr_name("comparison"),
+    options_for_select(filter.comparison_options, filter.comparison) %>
 </td>
 <td colspan="3">
-  <%= (filter.attribute_type != :boolean ? text_field_tag(filter.attr_name("value"), filter.value) : "&nbsp;".html_safe) -%>
+  <% if filter.include_value? -%>
+    <%= text_field_tag(filter.attr_name("value"), filter.rendered_value) %>
+  <% end -%>
+  &nbsp;
 </td>

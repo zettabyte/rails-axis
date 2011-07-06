@@ -5,38 +5,53 @@ module Axis
       class Filter
         class Pattern
 
-          #
           # Define what aliases we support for our special query character-
           # matching symbols: "%" and "_"
-          #
           ALIASES = { "*".freeze => "%".freeze }.freeze
 
           #
-          # Apply this filter on the provided scope
+          # This gets the display version of #value
           #
-          def apply(scope)
-            if apply?
-              field = negated? ? :field.does_not_match : :field.matches
-              scope.where(field => unaliased_pattern)
-            else
-              scope
-            end
+          def rendered_value
+            value.blank? ? "" : value
+          end
+
+          private
+
+          #
+          # Generate a hash representing an individual sql WHERE-clause (using
+          # the MetaWhere gem features) for this filter on the provided column
+          # name.
+          #
+          # If the filter doesn't apply then just return nil.
+          #
+          def where_clause(column)
+            return nil unless apply?
+            column = column.intern
+            { (negated? ? column.not_matches : column.matches) => unaliased_value }
           end
 
           #
           # Update the form's filter according to the provided "changes". Returns
           # a boolean indicating whether any changes were made or not.
           #
-          def update(changes = nil)
-            new_pattern = changes[:pattern] rescue nil
-            new_pattern = nil unless new_pattern.is_a?(String) and !new_pattern.blank?
-            result      = new_pattern != pattern
-            pattern     = new_pattern
-            # Call the super-class implementation to do any common work
-            super ? true : result
+          def private_update(changes)
+            new_value = changes[:value]
+            new_value = nil if new_value.blank?
+            result    = new_value != value
+            value     = new_value
+            result
           end
 
-          private
+          #
+          # After a new state filter is created it might not have the best set
+          # of default values since it isn't aware of the associated attribute's
+          # settings. This is called when the state filter is first constructed
+          # and "wrapped" by the session filter to set up these context-aware
+          # defaults.
+          #
+          def initial_defaults
+          end
 
           #
           # For each entry in ALIASES, unalias any single sequences of the alias
@@ -48,9 +63,9 @@ module Axis
           #   ALIASES => { "*" => "%" }
           #   pattern => "* ** ***"
           # Then:
-          #   unaliased_pattern => "% * *%"
+          #   unaliased_value => "% * *%"
           #
-          def unaliased_pattern
+          def unaliased_value
             ALIASES.each do |orig, dest|
               pattern.gsub(Regexp.new(Regexp.escape(orig) + "{1,2}")) { $& == orig ? dest : orig }
             end

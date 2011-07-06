@@ -62,6 +62,32 @@ module Axis
             result
           end
 
+          #
+          # This gets a formatted, displayable string version of #value. It will
+          # apply any custom formatter for the filter value and optionally
+          # "hide" it (by returning an empty string) in cases where the value
+          # should simply be ignored.
+          #
+          def rendered_value
+            result = value.to_s
+            # TODO: implement custom formatter block (in attribute filter
+            #       definitions) to control how non-string type values get
+            #       formatted to strings for display
+            if comparison.blank? or SPECIALS[:comparisons].include?(comparison) or attribute_type == :boolean
+              ""
+            else
+              result
+            end
+          end
+
+          #
+          # Returns true if template code should draw a "value" text box in
+          # addition to the comparison select box or not.
+          #
+          def include_value?
+            attribute_type != :boolean
+          end
+
           private
 
           #
@@ -113,31 +139,31 @@ module Axis
           # a boolean indicating whether any changes were made or not.
           #
           def private_update(changes)
-            applied        = apply?
             new_comparison = changes[:comparison]
             new_value      = changes[:value]
-            result         = new_comparison == comparison
+            result         = new_comparison != comparison
             if new_comparison.blank?
-              result     = !comparison.blank?
+              result     = apply? # a change occured if old filter "applied"
               value      = nil
               comparison = nil
             elsif SPECIALS[:comparisons].include?(new_comparison)
               comparison = new_comparison
-              value      = "" # so that #apply? works
+              value      = true # so that #apply? works; value ignored
             elsif COMPARISONS[attribute_type].include?(new_comparison)
               # convert new_value to correct data type
               new_value = case attribute_type
+              when :string  then new_value == "" ? nil : new_value
               when :numeric then Validate.numeric(new_value)
-              when :boolean then new_comparison == "true"
+              when :boolean then new_comparison == "true" # set #value from #comparison
               when :temporal
                 tmp = Validate.temporal(new_value)
                 attribute.type == :date ? tmp.to_date : tmp
               end rescue nil
-              result   ||= new_value == value
+              result   ||= new_value != value
               comparison = new_comparison
               value      = new_value
             end
-            result || applied != apply?
+            result
           end
 
           #

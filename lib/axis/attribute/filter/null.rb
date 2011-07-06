@@ -40,6 +40,11 @@ module Axis
         attr_reader               :use_empty
         alias_method :use_empty?, :use_empty
 
+        # Boolean: if true then, when the checkbox is checked or the NULL option
+        # radio button is selected, match the special NULL value only.
+        def use_null ; !use_blank? && !use_empty? ; end
+        alias_method :use_null?, :use_null
+
       end # class  Null
     end   # class  Filter
   end     # class  Attribute

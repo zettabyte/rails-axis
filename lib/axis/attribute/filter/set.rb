@@ -4,14 +4,32 @@ module Axis
     class Filter
       class Set < Filter
 
-        # If any of #include_null? or #include_blank? or #include_empty? are
-        # true then the values in this hash represent the special index number
-        # that state filters should use as their #selected value to indicate
-        # NULL, "blank" or "empty" values respectively.
-        SPECIALS = {
-          "Unset".freeze => -1,
-          "Blank".freeze => -2,
-          "Empty".freeze => -3
+        # These are the names of the "special" values in the order they should
+        # be listed as options to the user (as/if they're available). These are
+        # available if #include_null?, #include_blank?, and/or #include_empty?
+        # yield true respectively.
+        #
+        # The real trick here is that these names are keys to the SPECIAL_*
+        # constants (below) and the string equivalent of these values, with the
+        # "include_" prefix and the "?" suffix matches the name of the query
+        # method used to determine if this special option is available on this
+        # filter.
+        SPECIALS = [ :null, :empty, :blank ].freeze
+
+        # The display labels for the special (null, blank, or empty) values that
+        # may be available (depending on #include_null?, etc).
+        SPECIAL_LABELS = {
+          :null  => "Unset".freeze,
+          :empty => "Empty".freeze,
+          :blank => "Blank".freeze
+        }.freeze
+
+        # The values associated with the special (null, blank, or empty) values
+        # that may be available (depending on #include_null?, etc).
+        SPECIAL_VALUES = {
+          :null  => -1,
+          :empty => -2,
+          :blank => -3
         }.freeze
 
         # Creates a :set-type attribute filter instance associated with an
@@ -22,11 +40,19 @@ module Axis
           @type          =  :set
           @multiple      = !!options.delete(:multi)
           @include_null  = !!options.delete(:null)
-          @include_blank = !!options.delete(:blank) and attribute_type == :string
           @include_empty = !!options.delete(:empty) and attribute_type == :string
+          @include_blank = !!options.delete(:blank) and attribute_type == :string
           @values        =   options.delete(:values)
+          if @values.is_a?(Array)
+            @ordering = @values # ordering just becomes alias for values
+          elsif @values.is_a?(Hash)
+            @ordering = @values.keys # whatever order the hash yields array of keys is order
+            @values.freeze           # must manually freeze @values since @ordering isn't an alias for it
+          else
+            raise ArgumentError, "invalid type for :values option: #{@values.class}"
+          end
+          @ordering.freeze
           raise ArgumentError, "unrecognized options present: #{options.keys.join(", ")}" unless options.empty?
-          raise ArgumentError, "invalid type for :values option: #{@values.class}" unless @values.is_a?(Hash) or @values.is_a?(Array)
         end
 
         # Boolean: if true, allow the user to select any number of the available
@@ -44,15 +70,15 @@ module Axis
 
         # Boolean: if true, include as an option the ability to explicitely
         # select a choice to match all records where the associated attribute is
-        # either NULL or an "empty" string ("" or a whitespace only string).
-        attr_reader                   :include_blank
-        alias_method :include_blank?, :include_blank
+        # an "empty" string ("").
+        attr_reader                   :include_empty
+        alias_method :include_empty?, :include_empty
 
         # Boolean: if true, include as an option the ability to explicitely
         # select a choice to match all records where the associated attribute is
-        # an "empty" string ("" or a whitespace only string).
-        attr_reader                   :include_empty
-        alias_method :include_empty?, :include_empty
+        # either NULL or an "empty" string ("").
+        attr_reader                   :include_blank
+        alias_method :include_blank?, :include_blank
 
         # Hash or Array containing the values that a user may select in order to
         # have matched against the record's associated attribute. If it is an
@@ -62,6 +88,11 @@ module Axis
         # will be displayed to represent the value while the hash value will be
         # the actual value matched against the attribute.
         attr_reader :values
+
+        # Array that contains the value keys (may just be an alias for #values)
+        # of the #values Hash or Array in the static order in which they'll be
+        # displayed to the user in the UI
+        attr_reader :ordering
 
       end # class  Set
     end   # class  Filter
