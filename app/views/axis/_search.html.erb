@@ -1,14 +1,25 @@
 <div class="axis-search" id="<%= form.attr_id("search") %>">
 
   <div class="axis-search-header">
-    <span class="axis-search-header-label">Search:</span>
-    <%= form_tag(path_for_self) do -%>
-      <%= select_tag form.attr_name("add"),
-        options_for_select(form.available_filters),
-        :include_blank => "Choose a filter..."
-        %>
-      <%= hidden_field_tag axis.attr_name("action"),  action_name %>
-      <%= submit_tag "Add" %>
+    <div class="axis-search-header-filters">
+      <span class="axis-search-header-label">Search:</span>
+      <%= form_tag(path_for_self) do -%>
+        <%= select_tag form.attr_name("add"),
+          options_for_select(form.available_filters),
+          :include_blank => "Choose a filter..."
+          %>
+        <%= hidden_field_tag axis.attr_name("action"),  action_name %>
+        <%= submit_tag "Add" %>
+      <% end -%>
+    </div>
+    <% if per -%>
+      <div class="axis-search-header-per">
+        <%= form_tag(path_for_self) do -%>
+          <%= select_tag form.attr_name("per"), options_for_select([5, 10, 25, 50, 100], form.per) %>
+          <%= hidden_field_tag axis.attr_name("action"), action_name %>
+          <%= submit_tag "Per Page" %>
+        <% end -%>
+      </div>
     <% end -%>
   </div>
 

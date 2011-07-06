@@ -2,34 +2,34 @@
 module Axis
 
   #
-  # Stores information about the current state of a set of bound UI elements.
+  # Stores information about the current, persisted state of a "form" (a set of
+  # bound UI elements). Each form holds a reference (and, in fact was created
+  # based on the presence of) a state instance that was persisted in the
+  # underlying session store.
   #
-  # Each user session may have one Axis::State instance stored in their session
-  # per back-end binding. The binding configures what models are bound to a
-  # front-end "form" and a user's state instance stores which records are
-  # currently associated (through search filters and column sorting) and which
-  # are diplayed (pagination) as well as other user interface configuration
-  # settings unique to the client.
+  # The State class is designed to only hold a collection of simple data fields
+  # and objects, ultimately composed only of basic ruby nil, boolean, string,
+  # numeric, and temporal data types (with a few wrapper sub-classes and an
+  # array container or two). Each state persists its relationship with the
+  # underlying binding that it's associated with in the "id" field.
   #
-  # Thus, each State instance references the Binding it is associated with. You
-  # can look up a state instance (or instances) for a controller/action pair
-  # by first finding what bindings exist for the pair. Then, using the globally
-  # unique binding "id" values as your key(s), you may find any/all associated
-  # state instances within the user's session. State instances for a user are
-  # all stored in a single hash which itself is stored in the session hash under
-  # the configured key ("axis" by default).
+  # Ultimately, the state stores record filtering, sorting, pagination and
+  # selection information, yielding the concept of a currently selected "page"
+  # of records and an individual "selected" record.
   #
   class State
 
     autoload :Sort,   'axis/state/sort'
     autoload :Filter, 'axis/state/filter'
 
+    # Maximum number of Sort instances (order-clauses) that may be stored per
+    # state instance.
     MAX_SORT_CLAUSES = 3
 
     def initialize(id, per = 25)
       @id  = validate_id(id)
       @per = validate_per(per)
-      reset
+      reset(true)
     end
 
     attr_reader :id       # our state/binding id number
@@ -41,26 +41,44 @@ module Axis
     def sort    ; @sort    ||= [] end
     def filters ; @filters ||= [] end
 
-    # total number of pages to hold all records
+    #
+    # Total number of pages needed to hold all records.
+    #
     def pages
       result = @total / @per
       @total % @per == 0 ? result : result + 1
     end
 
-    # number of records to skip in amongst all matching records in order to get
-    # to the records of the current page
+    #
+    # Return the number of records to skip amongst all matching records in order
+    # to get to the records of the currently selected page.
+    #
     def page_offset
       (@page > 0 ? @page - 1 : 0) * @per
     end
 
-    # absolute offset of current record (0-based) amongst all matching records
+    #
+    # Absolute offset of currently "selected" record using a 0-based offset
+    # value that takes into account the total number of currently matching
+    # records (given the current filters).
+    #
+    # Returns nil unless there are mathcing records (total has been initialized)
+    # and an actual record *is* selected (page and selected fields non-zero).
+    #
     def offset
-      # unless we've got records and one of them selected, return nil
       return nil unless @total > 0 and @page > 0 and @selected > 0
       @per * (@page - 1) + (@selected - 1)
     end
 
-    # select a record from all records using 0-based offset (or pass false/nil to de-select any records)
+    #
+    # Select a record (and page) specifically, using a 0-based offset value
+    # that takes into account the total number of currently matching records
+    # (given the current filters).
+    #
+    # Raises an exception if you try to select an offset that's out of range
+    # (given the current total) or if, currently, total hasn't been initialized
+    # (or the total otherwise *is* zero).
+    #
     def offset=(i)
       i = validate_offset(i)
       raise ArgumentError, "cannot select record unless one or more are loaded" unless @total > 0
@@ -69,7 +87,9 @@ module Axis
       @selected = i % @per + 1
     end
 
-    # set how many records to list per page (preserve record selection)
+    #
+    # Set how many records to list per page (preserve record selection)
+    #
     def per=(c)
       tmp         = offset # save original offset index
       @per        = validate_per(c)
@@ -78,7 +98,11 @@ module Axis
       self.offset = tmp if tmp
     end
 
-    # allow user to manually override (set) what the total record count is...
+    #
+    # Initialize or (re)set what the total number of matching records is, taking
+    # into account the current set of filters (object's client responsible for
+    # performing filtering to derive this value).
+    #
     def total=(t)
       @total = validate_total(t)
       if @total < 1
@@ -92,7 +116,10 @@ module Axis
       end
     end
 
-    # select which page of records to display (implicitely selects first record of page)
+    #
+    # Select which page of records to display (implicitely selects first record
+    # of the page) using 1-based page number.
+    #
     def page=(p)
       p = validate_page(p)
       raise ArgumentError, "page number out of range: #{p}" unless p <= pages
@@ -100,7 +127,10 @@ module Axis
       @page     = p
     end
 
-    # select which record on the current page to display
+    #
+    # Select which record on the current page to to be the currently "selected"
+    # record (using 1-based record number).
+    #
     def selected=(s)
       s   = validate_selected(s)
       max = @page == pages ? @total % @per : @per
@@ -109,47 +139,88 @@ module Axis
       @selected = s
     end
 
-    # sort records by the specified attribute
+    #
+    # Add a sort-clause, it becoming the first-priority sort clause, to the
+    # current state object.
+    #
+    # Returns true if this actually changes the current sort status, otherwise
+    # false. Also, note that if true was returned then the currently "selected"
+    # record will have been (re)set to the first (offset 0).
+    #
     def sort_by(name, descending = false)
+      original = @sort.dup
       new_sort = Sort.new(name, descending)
-      return self if @sort.first == new_sort
+      return false if @sort.first == new_sort
       @sort.reject! { |o| o.name == new_sort.name }
       @sort.unshift(new_sort)
-      @sort      = @sort[0, MAX_SORT_CLAUSES]
-      self.offset = 0 if @total > 0
-      self # this method is chainable
+      @sort = @sort[0, MAX_SORT_CLAUSES]
+      return false if @sort == original
+      self.offset = 0 if @total > 0 # may change @page too
+      true # sorting has changed
     end
 
-    # reset the "selection" state
-    def reset_selection
-      @total    = 0
-      @page     = 0
-      @selected = 0
-      self # this method is chainable
+    #
+    # Reset state to original. Returns true if this change in state may trigger
+    # a change in the set of "matching" records and/or the "selected" record,
+    # otherwise returns false.
+    #
+    # While doing a reset, you can specify it the record total should be zero-ed
+    # out as well, effecting greater change.
+    #
+    def reset(total = false)
+      result = reset_filters(total)
+      result = reset_sort    ? true : result
+      reset_selection(total) ? true : result
     end
 
-    # reset the sorting to the default (no sort clauses)
+    #
+    # Reset (remove) all filters. Returns true if this change in state may
+    # trigger a change in the set of "matching" records and/or the "selected"
+    # record, otherwise returns false.
+    #
+    # While doing a reset, you can specify if the record total should be zero-ed
+    # out as well, effecting greater change.
+    #
+    def reset_filters(total = false)
+      result   = @filters.any? { |f| f.apply? }
+      @filters = []
+      result   = reset_selection(true) ? true : result if result or total
+      result
+    end
+
+    #
+    # Reset (remove) all sort clauses. Returns true if this actually triggers
+    # a change in state.
+    #
     def reset_sort
-      @sort = []
-      if @total > 0
-        @page     = 1
-        @selected = 1
+      result = !@sort.empty?
+      @sort  = []
+      result = reset_selection ? true : result if result
+      result
+    end
+
+    #
+    # Reset concept of "which" record is selected. If this effects an actual
+    # change, then true is returned, otherwise false is returned.
+    #
+    # While doing a reset, you can specify if the record total should be zero-ed
+    # out as well, effecting greater change.
+    #
+    def reset_selection(total = false)
+      result = false
+      if @total > 0 # can we change anything anyway?
+        if total
+          result    = true
+          @total    = 0
+          @page     = 0
+          @selected = 0
+        else
+          result    = true unless @page == 1 and @selected == 1
+          @page     = 1
+          @selected = 1
+        end
       end
-      self # this method is chainable
-    end
-
-    # reset filter list to original (no records filtered yet)
-    def reset_filters
-      @filters  = []
-      reset_selection
-      self # this method is chainable
-    end
-
-    # reset state to original (no records yet loaded)
-    def reset
-      reset_filters # also calls reset_selection
-      reset_sort
-      self # this method is chainable
+      result
     end
 
     ############################################################################
@@ -168,5 +239,5 @@ module Axis
     def validate_page(v)     ; Validate.integer(v, 1)       end
     def validate_selected(v) ; Validate.integer(v, 1)       end
 
-  end # class State
+  end # class  State
 end   # module Axis

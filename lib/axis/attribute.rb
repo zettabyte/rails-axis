@@ -130,7 +130,7 @@ module Axis
     def searchable(options = {}, &block)
       raise ArgumentError, "invalid type for options hash: #{options.class}" unless options.is_a?(Hash)
       filter      = options.delete(:filter) || :default
-      @filter     = Axis::Attribute::Filter.new(filter, @type, @model, options, &block)
+      @filter     = Axis::Attribute::Filter.create(filter, @model, @type, options, &block)
       @searchable = true
     end
 

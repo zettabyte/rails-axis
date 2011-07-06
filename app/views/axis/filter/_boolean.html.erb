@@ -1,9 +1,8 @@
 <td colspan="4">
-  <%= hidden_field_tag filter.attr_name("here"), "1" %>
-  <% if filter.multi? -%>
-    <div><%= radio_button_tag filter.attr_name("value"), "1", filter.value? %>True</div>
-    <div><%= radio_button_tag filter.attr_name("value"), "0", filter.value == false %>False</div>
+  <% if filter.radio? -%>
+    <div><%= radio_button_tag filter.attr_name("true"), "1", filter.value? %>True</div>
+    <div><%= radio_button_tag filter.attr_name("true"), "0", filter.value == false %>False</div>
   <% else -%>
-    <div><%= check_box_tag filter.attr_name("value"), "1", filter.value? %> True?</div>
+    <div><%= check_box_tag filter.attr_name("true"), "1", filter.value? %> True?</div>
   <% end -%>
 </td>

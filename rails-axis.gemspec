@@ -6,9 +6,9 @@ Gem::Specification.new do |s|
   s.name        = "rails-axis"
   s.version     = Axis::Version::STRING
   s.authors     = ["Kendall Gifford"]
-  s.email       = ["kendall@titlemanagers.com"]
-  s.homepage    = "http://gems.titlemanagers.com/rails-axis"
-  s.license     = "PROPRIETARY"
+  s.email       = ["zettabyte@gmail.com"]
+  s.homepage    = "http://github.com.com/titlemanagers/rails-axis"
+  s.license     = "MIT"
   s.summary     = "Search, sort, and sub-form design-pattern for rails"
   s.description = <<-END.gsub(/^\s+/, "")
     Search, sort, and sub-form design-pattern for rails.

@@ -2,7 +2,7 @@
 module Axis
   class Attribute
     class Filter
-      class Default
+      class Default < Filter
 
         # Creates a :default-type attribute filter instance associated with an
         # attribute of the specified attribute_type on the specified model.

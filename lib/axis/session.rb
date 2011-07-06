@@ -4,10 +4,13 @@ require 'axis/core_ext/hash'
 module Axis
   class Session
 
-    SESSION = "axis".freeze # key for axis entry in main session hash
-    PARAMS  = "axis".freeze # key for axis entry in main params  hash
-
     autoload :Form, 'axis/session/form'
+
+    # Key for axis entry in main session hash.
+    SESSION = "axis".freeze
+
+    # Key for axis entry in main params hash.
+    PARAMS = "axis".freeze
 
     #
     # Initialize instance and perform our "before filter" logic...

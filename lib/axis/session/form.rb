@@ -202,19 +202,7 @@ module Axis
       # this form is bound to when no filters are applied).
       #
       def absolute_total
-        if parent
-          parent.record.send(scope).count
-        else
-          model.send(scope || :all).count
-        end
-      end
-
-      #
-      # This updates the total (as stored in the state) according to how many
-      # records match our filters. This new, updated total is then returned.
-      #
-      def update_total
-        state.total = scoped.count
+        @absolute_total ||= scoped.count
       end
 
       #
@@ -226,15 +214,23 @@ module Axis
       #       be chosen.
       #
       def reload!
-        update_total
+        update_total!
         if state.total > 0
-          state.page = 1 if page < 1
+          state.offset ||= 0 # select first if none selected
           @records = paged
           @record  = @records[selected - 1]
         else
           @records = []  # none in current page
           @record  = nil # no record selected
         end
+      end
+
+      #
+      # This updates the total (as stored in the state) according to how many
+      # records match our filters. This new, updated total is then returned.
+      #
+      def update_total!
+        state.total = filtered.count
       end
 
       #
@@ -284,72 +280,86 @@ module Axis
       # request's params hash) and the specified command (value of the 'commit'
       # key if present).
       #
-      # Returns the form object, making this method chainable.
-      #
       def update(options, command = nil)
-        unless options.is_a?(Hash)
-          # Support simple "reset" links
-          state.reset if options =~ /^reset$/i
-          # See if shorthand offset record selection was used...
-          i = Normalize.integer(options)
-          if i.is_a?(Integer)
-            state.offset = i rescue nil
+        #
+        # We expect to take advantage or exceptions to short-circuit code paths
+        # and send us the the end of the method...
+        #
+        begin
+
+          #
+          # Process all the shortcut (linkable) axis actions. After this block
+          # of code, all future blocks that treat options like a hash will just
+          # short-circuit to the end of the method if this block runs (options
+          # isn't a hash) successfully (options ends up being a valid offset
+          # integer).
+          #
+          unless options.is_a?(Hash)
+            # Support simple "reset" links
+            state.reset(true) if options.to_s =~ /^reset$/i
+            # See if shorthand offset record selection was used...
+            state.offset = options # fails w/exception if options isn't int
           end
-        end
 
-        #
-        # At this point, all other actions will be represented by options being
-        # a hash. So, if it isn't a hash, make it one...
-        #
-        options = {} unless options.is_a?(Hash)
-
-        #
-        # See if there was a request to nuke a filter
-        #
-        if options[:del]
-          i = Validate.integer(options[:del], 0) rescue nil
-          if options[:del] == "all"
-            filters.reset
-          elsif i and i < filters.length
-            filters.delete_at(i)
-          end
-        end
-
-        #
-        # See if there was a request to add a filter
-        #
-        if options[:add]
-          attribute = searchables[options[:add]]
-          filters.add(attribute) if attribute
-        end
-
-        #
-        # See if the search form was submitted. If so, take the action appropriate
-        # to the commit "command".
-        #
-        if options[:form] == "search"
-          if command =~ /^update$/i
-            filters_changed = false
-            changes         = options[:filter].is_a?(Hash) ? options[:filter] : {}
-            filters.each_with_index do |filter, filter_id|
-              filters_changed = filter.update(changes[filter_id.to_s]) ? true : filters_changed
+          #
+          # See if there was a request to nuke a filter
+          #
+          if options[:del]
+            if options[:del] == "all"
+              filters.reset
+            else
+              filters.delete_at(options[:del])
             end
-            state.reset_selection if filters_changed
-          elsif command =~ /^reset$/i
-            filters.reset unless filters.empty?
           end
+
+          #
+          # See if there was a request to add a filter
+          #
+          if options[:add]
+            attribute = searchables[options[:add]]
+            filters.add(attribute) if attribute
+          end
+
+          #
+          # See if the search form was submitted. If so, take the action appropriate
+          # to the commit "command".
+          #
+          if options[:form] == "search"
+            if command =~ /^update$/i
+              filters_changed = false
+              changes         = options[:filter].is_a?(Hash) ? options[:filter] : {}
+              filters.each_with_index do |filter, filter_id|
+                filters_changed = filter.update(changes[filter_id.to_s]) ? true : filters_changed
+              end
+              state.reset_selection(true) if filters_changed
+            elsif command =~ /^reset$/i
+              filters.reset unless filters.empty?
+            end
+          end
+
+          #
+          # Process any changes in "per-page" settings
+          #
+          if options[:per]
+            new_per = Validate.integer(options[:per]) rescue state.per
+            state.per = new_per if new_per != state.per
+          end
+
+          # 2. check for sort-clause updates
+          #   a. modify active sort commands: axis[0][sort]=reset, =desc, =asc, =rev
+          #   b. specific sort commands: ={:by => attr_name [, :dir => one of: :asc, :desc]}
+          # 3. check for page selection/navigation
+          #   a. page selection: axis[0][page]=5 / axis[0][page]=first, =last, :next, :prev, :none, :reset
+          # 4. check for record selection
+          #   a. record selection: axis[0][select]=2 / axis[0][select]=first, =last, :next, :prev, :none, :reset
+          #   b. offset selection: axis[0][offset]=0
+
+        ensure
+          # If we do nothing else, call reload! in order to select the current
+          # set of matching records (if any) and the currently selected record
+          # (if there is one).
+          reload!
         end
-
-        # 2. check for sort-clause updates
-        #   a. modify active sort commands: axis[0][sort]=reset, =desc, =asc, =rev
-        #   b. specific sort commands: ={:by => attr_name [, :dir => one of: :asc, :desc]}
-        # 3. check for page selection/navigation
-        #   a. page selection: axis[0][page]=5 / axis[0][page]=first, =last, :next, :prev, :none, :reset
-        # 4. check for record selection
-        #   a. record selection: axis[0][select]=2 / axis[0][select]=first, =last, :next, :prev, :none, :reset
-        #   b. offset selection: axis[0][offset]=0
-
-        reload! # apply filters and get current page
         self
       end
 

@@ -50,9 +50,14 @@ module Axis
         end
 
         def delete_at(index)
+          index  = Validate.integer(index, 0)
           result = array.delete_at(index)
-          form.state.reset_selection if result
+          form.state.reset_selection(true) if result and result.apply?
           result ? Filter.new(form, result) : nil # be consistent
+        end
+
+        def index(obj)
+          array.index(obj) || array.index { |state| obj.try(:state) == state }
         end
 
         #
@@ -70,7 +75,8 @@ module Axis
         # classes should be kept dumb).
         #
         def add(attribute)
-          array << Filter.create(form, attribute)
+          raise ArgumentError, "provided attribute isn't searchable: #{attribute.name}" unless attribute.searchable?
+          array << Axis::State::Filter.create(attribute.name, attribute.filter)
           self # this method is chainable
         end
 

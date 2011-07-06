@@ -40,10 +40,6 @@ module Axis
     # string) to be processed, modifying the user's axis state as necessary.
     #
     def axis_before_filter
-      Rails.logger.debug "\n\n\n\n#{'*' * 80}\nState Before Request\n#{'*' * 80}"
-      Rails.logger.debug "Session:\n\t#{session.inspect}\n"
-      Rails.logger.debug "Params:\n\t#{params.inspect}"
-      Rails.logger.debug "#{'*' * 80}\n\n\n"
       @__axis_session__ = Axis::Session.new(self)
     end
 

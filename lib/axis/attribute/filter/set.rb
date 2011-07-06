@@ -2,7 +2,17 @@
 module Axis
   class Attribute
     class Filter
-      class Set
+      class Set < Filter
+
+        # If any of #include_null? or #include_blank? or #include_empty? are
+        # true then the values in this hash represent the special index number
+        # that state filters should use as their #selected value to indicate
+        # NULL, "blank" or "empty" values respectively.
+        SPECIALS = {
+          "Unset".freeze => -1,
+          "Blank".freeze => -2,
+          "Empty".freeze => -3
+        }.freeze
 
         # Creates a :set-type attribute filter instance associated with an
         # attribute of the specified attribute_type on the specified model.
