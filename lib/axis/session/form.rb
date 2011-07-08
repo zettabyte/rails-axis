@@ -5,6 +5,33 @@ module Axis
 
       autoload :Filter,    'axis/session/form/filter'
       autoload :FilterSet, 'axis/session/form/filter_set'
+      autoload :Sort,      'axis/session/form/sort'
+      autoload :SortSet,   'axis/session/form/sort_set'
+
+      SETTINGS = {
+        :minimum_in_group     => 9, # may never be set below 1
+        :minimum_at_beginning => 2, # must be >= 0
+        :minimum_at_end       => 2, # must be >= 0
+        :include_first        => true,
+        :include_rewind       => true,
+        :include_prev         => true,
+        :include_next         => true,
+        :include_forward      => true,
+        :include_last         => true,
+        :always_show_first    => true,
+        :always_show_rewind   => true,
+        :always_show_prev     => true,
+        :always_show_next     => true,
+        :always_show_forward  => true,
+        :always_show_last     => true,
+        :label_first          => "First".freeze,
+        :label_rewind         => "&#x27ea;".freeze,
+        :label_prev           => "&#x27e8;".freeze,
+        :label_next           => "&#x27e9;".freeze,
+        :label_forward        => "&#x27eb;".freeze,
+        :label_last           => "Last".freeze,
+        :label_ellipses       => "&hellip;".freeze
+      }.freeze
 
       def initialize(session, binding, state)
         @session = session
@@ -59,6 +86,14 @@ module Axis
       end
 
       #
+      # Just a proxy pass-through to the #attr_class method on the underlying
+      # Axis::Session object.
+      #
+      def attr_class(*keys)
+        session.attr_class(*keys)
+      end
+
+      #
       # Used to generate the name, used in HTML form controls, for a given
       # attribute. The attribute here is defined by a list of values that would
       # be the sequence of keys needed to look up the attribute value in the
@@ -98,6 +133,34 @@ module Axis
       #
       def attr_hash(*keys_and_value)
         session.attr_hash(*keys_and_value.unshift(id))
+      end
+
+      #
+      # Used to generate the class string, used in HTML elements (and referenced
+      # by CSS rules), for a given attribute's column header cell that takes
+      # into account whether the attribute is sortable and, if so, also includes
+      # the sorting state currently in effect. The caller provides an attribute
+      # instance for which the column header is being rendered.
+      #
+      # Examples:
+      #   form.attr_sort_class(attr_1, "table", "header") => "axis-table-header"
+      #   form.attr_sort_class(attr_2, "table", "header") => "axis-table-header-sorting-2-up"
+      #   form.attr_sort_class(attr_3, "table", "header") => "axis-table-header-sortable"
+      #   form.attr_sort_class(attr_4, "table", "header") => "axis-table-header-sorting-1"
+      #
+      def attr_sort_class(attr, *prefix)
+        if attr.sortable?
+          sort = sorts[attr]
+          if sort
+            # attribute is sortable and we're sorting by it now
+            sort.attr_class(*prefix)
+          else
+            # attribute is sortable; we're just not sorting by it now
+            attr_class(*(prefix + ["sortable"]))
+          end
+        else
+          attr_class(*prefix)
+        end
       end
 
       #
@@ -196,6 +259,141 @@ module Axis
       def total       ; state.total       end
       def offset      ; state.offset      end
       def page_offset ; state.page_offset end
+      def page_total  ; state.page_total  end
+
+      def minimum_in_group     ; SETTINGS[:minimum_in_group     ] end
+      def minimum_at_beginning ; SETTINGS[:minimum_at_beginning ] end
+      def minimum_at_end       ; SETTINGS[:minimum_at_end       ] end
+      def include_first?       ; SETTINGS[:include_first        ] end
+      def include_rewind?      ; SETTINGS[:include_rewind       ] end
+      def include_prev?        ; SETTINGS[:include_prev         ] end
+      def include_next?        ; SETTINGS[:include_next         ] end
+      def include_forward?     ; SETTINGS[:include_forward      ] end
+      def include_last?        ; SETTINGS[:include_last         ] end
+      def always_show_first?   ; SETTINGS[:always_show_first    ] end
+      def always_show_rewind?  ; SETTINGS[:always_show_rewind   ] end
+      def always_show_prev?    ; SETTINGS[:always_show_prev     ] end
+      def always_show_next?    ; SETTINGS[:always_show_next     ] end
+      def always_show_forward? ; SETTINGS[:always_show_forward  ] end
+      def always_show_last?    ; SETTINGS[:always_show_last     ] end
+      def label_first          ; SETTINGS[:label_first   ].html_safe end
+      def label_rewind         ; SETTINGS[:label_rewind  ].html_safe end
+      def label_prev           ; SETTINGS[:label_prev    ].html_safe end
+      def label_next           ; SETTINGS[:label_next    ].html_safe end
+      def label_forward        ; SETTINGS[:label_forward ].html_safe end
+      def label_last           ; SETTINGS[:label_last    ].html_safe end
+      def label_ellipses       ; SETTINGS[:label_ellipses].html_safe end
+
+      def show_first?
+        return false unless include_first?
+        return true      if always_show_first?
+        first_page_range.count <= 0 and main_page_range.min > first_page
+      end
+
+      def show_rewind?
+        return false unless include_rewind?
+        return true      if always_show_rewind?
+        show_left_ellipses?
+      end
+
+      def show_prev?
+        return false unless include_prev?
+        return true      if always_show_prev?
+        show_left_ellipses? and minimum_in_group <= 1
+      end
+
+      def show_next?
+        return false unless include_next?
+        return true      if always_show_next?
+        show_right_ellipses? and minimum_in_group <= 1
+      end
+
+      def show_forward?
+        return false unless include_forward?
+        return true      if always_show_forward?
+        show_right_ellipses?
+      end
+
+      def show_last?
+        return false unless include_last?
+        return true      if always_show_last?
+        last_page_range.count <= 0 and main_page_range.max < last_page
+      end
+
+      def show_left_ellipses?
+        first_page_range.count > 0 or main_page_range.min > first_page
+      end
+
+      def show_right_ellipses?
+        last_page_range.count > 0 or main_page_range.max < last_page
+      end
+
+      def first_page ; 1        end
+      def prev_page  ; page - 1 end
+      def next_page  ; page + 1 end
+      def last_page  ; pages    end
+
+      def rewind_page
+        [first_page, main_page_range.min].max
+      end
+
+      def forward_page
+        [last_page, main_page_range.max].min
+      end
+
+      def on_first?
+        page <= first_page
+      end
+
+      def on_last?
+        page >= last_page
+      end
+
+      #
+      # Returns a range object representing the range of pages that are part of
+      # the "main" pagination page-number-list group.
+      #
+      def main_page_range
+        lower_bound = [first_page, page - (minimum_in_group / 2)].max
+        upper_bound = [last_page, lower_bound + minimum_in_group].min
+        # see if we should merge/consume the first_page_range
+        lower_bound = first_page if first_page + minimum_at_beginning >= lower_bound
+        # see if we should merge/consume the last_page_range
+        upper_bound = last_page if last_page - minimum_at_end <= upper_bound
+        lower_bound..upper_bound
+      end
+
+      #
+      # Return a range object representing the range of pages that are part of
+      # the "first" pagination page-number-list group (ie, pages 1-x).
+      #
+      # This will return an "empty" range (result.count == 0) if this page range
+      # is subsumed within the main_page_range. Attempting to iterate over this
+      # result will produce no result.
+      #
+      def first_page_range
+        upper_bound = first_page + minimum_at_beginning - 1
+        main        = main_page_range
+        # see if we were merged/consumed by the main_page_range
+        upper_bound = first_page - 1 if main.min <= first_page
+        first_page..upper_bound
+      end
+
+      #
+      # Return a range object representing the range of pages that are part of
+      # the "last" pagination page-number-list group (ie, pages x-last_page).
+      #
+      # This will return an "empty" range (result.count == 0) if this page range
+      # is subsumed within the main_page_range. Attempting to iterate over this
+      # result will produce no result.
+      #
+      def last_page_range
+        lower_bound = last_page - minimum_at_end + 1
+        main        = main_page_range
+        # see if we were merged/consumed by the main page range
+        lower_bound = last_page + 1 if main.max >= last_page
+        lower_bound..last_page
+      end
 
       #
       # This returns the absolute total number of records available (the number
@@ -253,7 +451,8 @@ module Axis
       # for the form.
       #
       def filtered
-        filters.inject(scoped) { |scope, filter| filter.apply(scope) }
+        result = filters.inject(scoped) { |scope, filter| filter.apply(scope) }
+        sorts.inject(result)            { |scope, sort  | sort.apply(scope)   }
       end
 
       #
@@ -267,12 +466,24 @@ module Axis
       #
       # Provide access to the current form's filters (as Session::Form::Filter
       # instances wrapping State::Filter instances and their associated
-      # Attribute and Attribute::Fitler instances).
+      # Attribute and Attribute::Filter instances).
       #
       # The filters are held in an array-like object, an instance of FilterSet.
       #
       def filters
         @filters ||= FilterSet.new(self)
+      end
+
+      #
+      # Provide access to the current form's sorts (as Session::Form::Sort
+      # instances wrapping State::Sort instances and their associated Attribute
+      # and Attribute::Filter instances).
+      #
+      # The sort instances are held in an array-like object, an instance of
+      # SortSet.
+      #
+      def sorts
+        @sorts ||= SortSet.new(self)
       end
 
       #
@@ -282,10 +493,10 @@ module Axis
       #
       def update(options, command = nil)
         #
-        # We expect to take advantage or exceptions to short-circuit code paths
-        # and send us the the end of the method...
+        # Set up a catch/throw block so we can short-circuit to the end of the
+        # update code path at any point...
         #
-        begin
+        catch(:done) do
 
           #
           # Process all the shortcut (linkable) axis actions. After this block
@@ -298,7 +509,10 @@ module Axis
             # Support simple "reset" links
             state.reset(true) if options.to_s =~ /^reset$/i
             # See if shorthand offset record selection was used...
-            state.offset = options # fails w/exception if options isn't int
+            if Normalize.integer(options).is_a?(Integer)
+              state.offset = options # fails w/exception if options isn't valid
+            end
+            throw :done
           end
 
           #
@@ -341,25 +555,44 @@ module Axis
           # Process any changes in "per-page" settings
           #
           if options[:per]
-            new_per = Validate.integer(options[:per]) rescue state.per
+            new_per   = Validate.integer(options[:per]) rescue state.per
             state.per = new_per if new_per != state.per
           end
 
-          # 2. check for sort-clause updates
-          #   a. modify active sort commands: axis[0][sort]=reset, =desc, =asc, =rev
-          #   b. specific sort commands: ={:by => attr_name [, :dir => one of: :asc, :desc]}
-          # 3. check for page selection/navigation
-          #   a. page selection: axis[0][page]=5 / axis[0][page]=first, =last, :next, :prev, :none, :reset
-          # 4. check for record selection
-          #   a. record selection: axis[0][select]=2 / axis[0][select]=first, =last, :next, :prev, :none, :reset
-          #   b. offset selection: axis[0][offset]=0
+          #
+          # Check for sort-clause updates
+          #
+          if options[:sort] and sortables.keys.include?(options[:sort])
+            existing = sorts[sortables[options[:sort]]]
+            if existing and existing.priority == 1
+              state.reset_selection if existing.reverse
+            else
+              state.reset_selection if state.sort_by(options[:sort])
+            end
+          end
 
-        ensure
-          # If we do nothing else, call reload! in order to select the current
-          # set of matching records (if any) and the currently selected record
-          # (if there is one).
-          reload!
-        end
+          #
+          # Check for page and record selection updates
+          #
+          new_page   = Validate.integer(options[:page],      1) rescue nil
+          new_record = Validate.integer(options[:selection], 1) rescue nil
+          new_offset = Validate.integer(options[:offset],    0) rescue nil
+          new_page   = new_record = nil if new_offset
+          if new_page or new_record or new_offset
+            update_total!
+            if new_offset
+              state.offset = new_offset if new_offset < state.total
+            else
+              state.page     = new_page   if new_page   and state.pages      >= new_page
+              state.selected = new_record if new_record and state.page_total >= new_record
+            end
+          end
+
+        end # catch(:done)
+        # If we do nothing else, call reload! in order to select the current
+        # set of matching records (if any) and the currently selected record
+        # (if there is one).
+        reload!
         self
       end
 

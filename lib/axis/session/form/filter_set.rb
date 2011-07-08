@@ -22,10 +22,10 @@ module Axis
           form.state.filters
         end
 
-        def length  ; array.length                          end
-        def to_a    ; array.map { |f| Filter.new(form, f) } end
-        def to_s    ; to_a.to_s                             end
-        def inspect ; to_a.inspect                          end
+        def length  ; array.length                             end
+        def to_a    ; array.map { |f| Filter.create(form, f) } end
+        def to_s    ; to_a.to_s                                end
+        def inspect ; to_a.inspect                             end
 
         def each(&block)
           to_a.each(&block)
@@ -77,6 +77,7 @@ module Axis
         def add(attribute)
           raise ArgumentError, "provided attribute isn't searchable: #{attribute.name}" unless attribute.searchable?
           array << Axis::State::Filter.create(attribute.name, attribute.filter)
+          Axis::Session::Form::Filter.create(form, array.last).initialize_defaults!
           self # this method is chainable
         end
 

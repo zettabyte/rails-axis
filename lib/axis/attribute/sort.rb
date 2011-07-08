@@ -82,45 +82,14 @@ module Axis
       attr_reader :column
 
       #
-      # If there is a request to sort an attribute in direction (dir), then this
-      # will map said direction to the actual direction this associated column
-      # would be sorted to. Returns a symbol, either :asc ord :desc for
-      # ascending or descending respectively.
+      # Returns true if this defines a sort configuration on the underlying
+      # column that will always sort the same direction or not. It is
+      # unidirectional if the #type is either :ascending or :descending.
       #
-      def direction(dir)
-        dir = case dir.to_s
-        when /\Aasc(ending)?\z/i  then :asc
-        when /\Adesc(ending)?\z/i then :desc
-        else ; raise ArgumentError, "illegal sorting direction: #{dir} (#{dir.class})"
-        end
-        case @type
-        when :ascending  then :asc
-        when :descending then :desc
-        when :default    then dir
-        when :reverse    then dir == :asc ? :desc : :asc
-        else
-          raise "internal error: sort instance has invalid type: #{@type} (#{type.class})"
-        end
+      def unidirectional?
+        [:ascending, :descending].include?(type)
       end
 
-      #
-      # Called to apply actual sorting ("ORDER BY" clauses) on a scope over the
-      # associated model. If no pre-existing scope is supplied, then this will
-      # begin a new one by applying a #sort call directly against the whole
-      # model class. Callers must provide the direction that it was requested
-      # that it (or rather, the owning attribute) be sorted as dir.
-      #
-      # Returns the new scope that has this ordering applied.
-      #
-      # NOTE: this uses the meta_where gem's extension of the Symbol class and
-      #       its extension of the ActiveRecord::QueryMethod#order method .
-      #
-      def order(dir, scope = nil)
-        scope   ||= @model
-        scope.order @column.intern.send(direction(dir))
-      end
-
-    end # class Sort
-
-  end # class Attribute
-end   # module Axis
+    end # class  Sort
+  end   # class  Attribute
+end     # module Axis

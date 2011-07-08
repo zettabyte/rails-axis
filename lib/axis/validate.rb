@@ -177,7 +177,7 @@ module Axis
       raise ArgumentError, "invalid type for an integer: #{arg.class} (#{arg})" unless result.is_a?(Integer)
       if range_or_minimum.is_a?(Range)
         raise ArgumentError, "invalid integer (out of range: #{range_or_minimum}): #{result}" unless range_or_minimum.include?(result)
-      else
+      elsif range_or_minimum.is_a?(Integer)
         raise ArgumentError, "invalid integer (below minimum: #{range_or_minimum}): #{result}" unless result >= range_or_minimum
       end
       result

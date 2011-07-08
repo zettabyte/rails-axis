@@ -14,8 +14,32 @@ module Axis
       #
       class Filter
 
+        autoload :Boolean, 'axis/session/form/filter/boolean'
+        autoload :Default, 'axis/session/form/filter/default'
+        autoload :Null,    'axis/session/form/filter/null'
+        autoload :Pattern, 'axis/session/form/filter/pattern'
+        autoload :Range,   'axis/session/form/filter/range'
+        autoload :Set,     'axis/session/form/filter/set'
+
         # Sub-hash key for filters in params.
         PARAMS = "filter".freeze
+
+        ########################################################################
+        class << self
+        ########################################################################
+
+          #
+          # Create a wrapping "form" filter using the provided form instance and
+          # the selected "state" filter of the appropriate filter sub-type.
+          #
+          def create(form, state)
+            klass = state.class.name.gsub(/.*::/, "#{self.class.nesting[1]}::").constantize
+            klass.new(form, state)
+          end
+
+        ########################################################################
+        end
+        ########################################################################
 
         #
         # Create a form filter which is a logic-rich wrapper around an attribute
@@ -113,6 +137,7 @@ module Axis
         # Apply this filter to the provided scope.
         #
         def apply(scope)
+          return scope unless apply?
           # Use logical filter's custom block if one exists...
           return block.call(scope, self) if block?
           # Generate our composite where-clause condition hash (well, a
@@ -122,8 +147,9 @@ module Axis
             where_clause(column)
           end.compact.reduce do |result, condition|
             # Combine generated where clause condition hashes together using
-            # a logical (SQL) OR-ing of them...
-            result | condition
+            # a logical (SQL) OR-ing of them (unless negated in which case we
+            # should AND them)...
+            negated? ? (result & condition) : (result | condition)
           end
           # If none of our conditions applied, return scope unaltered,
           # otherwise return sub-scope after applying our conditions...
@@ -139,8 +165,8 @@ module Axis
           result    = private_update(changes) # perform type-specific updates
           negate    = Validate.boolean(changes[:negate]) rescue nil
           if negatable?
-            result ||= negate != negated?
-            negated  = negate
+            result      ||= negate != negated?
+            self.negated  = negate
           end
           result
         end

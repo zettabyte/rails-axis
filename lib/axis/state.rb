@@ -58,6 +58,17 @@ module Axis
     end
 
     #
+    # Return the number of records available on the currently selected page.
+    # This is normally the same as #per but may be less if the last page is
+    # selected.
+    #
+    def page_total
+      return 0    unless @page > 0 and @total > 0
+      return @per     if @page < pages
+      @total % @per
+    end
+
+    #
     # Absolute offset of currently "selected" record using a 0-based offset
     # value that takes into account the total number of currently matching
     # records (given the current filters).
@@ -182,7 +193,7 @@ module Axis
     # out as well, effecting greater change.
     #
     def reset_filters(total = false)
-      result   = @filters.any? { |f| f.apply? }
+      result   = @filters and @filters.any? { |f| f.apply? }
       @filters = []
       result   = reset_selection(true) ? true : result if result or total
       result
@@ -193,7 +204,7 @@ module Axis
     # a change in state.
     #
     def reset_sort
-      result = !@sort.empty?
+      result = @sort and !@sort.empty?
       @sort  = []
       result = reset_selection ? true : result if result
       result
@@ -207,7 +218,10 @@ module Axis
     # out as well, effecting greater change.
     #
     def reset_selection(total = false)
-      result = false
+      result      = false
+      @total    ||= 0 # initialize these to their defaults...
+      @page     ||= 0
+      @selected ||= 0
       if @total > 0 # can we change anything anyway?
         if total
           result    = true

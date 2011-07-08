@@ -175,6 +175,20 @@ module Axis
     def sortable?    ;  @sortable    ; end
 
     #
+    # This method only makes sense if called on a #sortable? attribute. If the
+    # attribute isn't sortable then this just returns true (though I guess that
+    # sort of makes sense...).
+    #
+    # Anyhow, if it *is* sortable, this tells you whether ascing to sort on this
+    # attribute in different orders (ascending or descending) makes a difference
+    # or not or if, instead, the order of sorting on the underlying columns, if
+    # enabled, is set in stone.
+    #
+    def unidirectional?
+      sort.all? { |s| s.unidirectional? }
+    end
+
+    #
     # This is the attribute's "display" name which is just the #humanize-ed
     # version of it's name unless it is a searchable attribute with the :display
     # option set, in which case that name is used instead.

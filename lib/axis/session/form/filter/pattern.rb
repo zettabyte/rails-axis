@@ -3,11 +3,22 @@ module Axis
   class Session
     class Form
       class Filter
-        class Pattern
+        class Pattern < Filter
 
           # Define what aliases we support for our special query character-
           # matching symbols: "%" and "_"
           ALIASES = { "*".freeze => "%".freeze }.freeze
+
+          #
+          # After a new state filter is created it might not have the best set
+          # of default values since it isn't aware of the associated attribute's
+          # settings. This is called when the state filter is first constructed
+          # and "wrapped" by the session filter to set up these context-aware
+          # defaults.
+          #
+          def initialize_defaults!
+            # default state is all empty
+          end
 
           #
           # This gets the display version of #value
@@ -26,7 +37,6 @@ module Axis
           # If the filter doesn't apply then just return nil.
           #
           def where_clause(column)
-            return nil unless apply?
             column = column.intern
             { (negated? ? column.not_matches : column.matches) => unaliased_value }
           end
@@ -36,21 +46,11 @@ module Axis
           # a boolean indicating whether any changes were made or not.
           #
           def private_update(changes)
-            new_value = changes[:value]
-            new_value = nil if new_value.blank?
-            result    = new_value != value
-            value     = new_value
+            new_value  = changes[:value]
+            new_value  = nil if new_value.blank?
+            result     = new_value != value
+            self.value = new_value
             result
-          end
-
-          #
-          # After a new state filter is created it might not have the best set
-          # of default values since it isn't aware of the associated attribute's
-          # settings. This is called when the state filter is first constructed
-          # and "wrapped" by the session filter to set up these context-aware
-          # defaults.
-          #
-          def initial_defaults
           end
 
           #

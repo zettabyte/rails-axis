@@ -1,9 +1,22 @@
 # encoding: utf-8
+require 'axis/validate'
+
 module Axis
   class Session
     class Form
       class Filter
-        class Range
+        class Range < Filter
+
+          #
+          # After a new state filter is created it might not have the best set
+          # of default values since it isn't aware of the associated attribute's
+          # settings. This is called when the state filter is first constructed
+          # and "wrapped" by the session filter to set up these context-aware
+          # defaults.
+          #
+          def initialize_defaults!
+            # default state is all empty
+          end
 
           #
           # This gets a formatted, displayable string version of #first. It will
@@ -39,7 +52,6 @@ module Axis
           # If the filter doesn't apply then just return nil.
           #
           def where_clause(column)
-            return nil unless apply?
             result = { column => first..last }
             negated? ? -result : result
           end
@@ -49,12 +61,12 @@ module Axis
           # a boolean indicating whether any changes were made or not.
           #
           def private_update(changes)
-            new_first = process_input(changes[:first])
-            new_last  = process_input(changes[:last])
-            result    = new_first != first
-            result  ||= new_last  != last
-            first     = new_first
-            last      = new_last
+            new_first  = process_input(changes[:first])
+            new_last   = process_input(changes[:last])
+            result     = new_first != first
+            result   ||= new_last  != last
+            self.first = new_first
+            self.last  = new_last
             result
           end
 
@@ -70,16 +82,6 @@ module Axis
               tmp = Validate.temporal(val) rescue nil
               tmp and attribute.type == :date ? tmp.to_date : tmp
             end
-          end
-
-          #
-          # After a new state filter is created it might not have the best set
-          # of default values since it isn't aware of the associated attribute's
-          # settings. This is called when the state filter is first constructed
-          # and "wrapped" by the session filter to set up these context-aware
-          # defaults.
-          #
-          def initial_defaults
           end
 
         end # class  Range

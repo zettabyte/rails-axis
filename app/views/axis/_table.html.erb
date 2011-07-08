@@ -1,11 +1,17 @@
-<div class="axis-table" id="<%= form.attr_id("table") %>">
+<div class="<%= form.attr_class("table") %>" id="<%= form.attr_id("table") %>">
   <table>
 
     <thead>
       <tr>
         <th scope="col" id="<%= form.attr_id("table", "header") %>">&nbsp;</th>
         <% form.displayables.each do |name, attr| -%>
-        <th scope="col" id="<%= form.attr_id("table", "header", name) %>"><%= attr.caption %></th>
+          <th scope="col" id="<%= form.attr_id("table", "header", name) %>" class="<%= form.attr_sort_class(attr, "table", "header") %>">
+            <% if attr.sortable? -%>
+              <%= link_to_self attr.caption, form.attr_hash("sort", attr.name) %>
+            <% else -%>
+              <%= attr.caption %>
+            <% end -%>
+          </th>
         <% end -%>
       </tr>
     </thead>
@@ -14,15 +20,23 @@
       <tr>
         <td>&nbsp;</td>
         <td colspan="<%= form.displayables.keys.length %>">
-          Showing page <%= form.page %> of <%= form.pages %> (<%= form.per %> per page)
+          <%= render :partial => "axis/pagination", :locals => { :form => form } %>
         </td>
       </tr>
     </tfoot>
 
     <tbody>
-      <% form.records.each do |record| -%>
+      <% form.records.each_with_index do |record, index| -%>
         <tr>
-          <td headers="<%= form.attr_id("table", "header") %>">&nbsp;</td>
+          <td headers="<%= form.attr_id("table", "header") %>">
+            <% if index + 1 == form.selected -%>
+              &#x25b6;
+            <% else -%>
+              <%= link_to_self form.attr_hash("selection", index + 1) do %>
+                &#x25b7;
+              <% end -%>
+            <% end -%>
+          </td>
           <% form.displayables.each do |name, attr| -%>
             <td headers="<%= form.attr_id("table", "header", name) %>"><%= form.render_field(attr, record) %></td>
           <% end -%>

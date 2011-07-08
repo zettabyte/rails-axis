@@ -1,9 +1,50 @@
 # encoding: utf-8
+require 'axis/normalize'
+
 module Axis
   class Session
     class Form
       class Filter
-        class Set
+        class Set < Filter
+
+          # These are the names of the "special" values in the order they should
+          # be listed as options to the user (as/if they're available). These
+          # are available if #include_null?, #include_blank?, and/or
+          # #include_empty? yield true respectively.
+          #
+          # The real trick here is that these names are keys to the SPECIAL_*
+          # constants (below) and the string equivalent of these values, with
+          # the "include_" prefix and the "?" suffix matches the name of the
+          # query method used to determine if this special option is available
+          # on this filter.
+          SPECIALS = [ :null, :empty, :blank ].freeze
+
+          # The display labels for the special (null, blank, or empty) values
+          # that may be available (depending on #include_null?, etc).
+          SPECIAL_LABELS = {
+            :null  => "Unset".freeze,
+            :empty => "Empty".freeze,
+            :blank => "Blank".freeze
+          }.freeze
+
+          # The values associated with the special (null, blank, or empty)
+          # values that may be available (depending on #include_null?, etc).
+          SPECIAL_VALUES = {
+            :null  => -1,
+            :empty => -2,
+            :blank => -3
+          }.freeze
+
+          #
+          # After a new state filter is created it might not have the best set
+          # of default values since it isn't aware of the associated attribute's
+          # settings. This is called when the state filter is first constructed
+          # and "wrapped" by the session filter to set up these context-aware
+          # defaults.
+          #
+          def initialize_defaults!
+            # default state is all empty
+          end
 
           #         
           # Return an array (of two-element arrays) containing the appropriate
@@ -32,16 +73,12 @@ module Axis
           # If the filter doesn't apply then just return nil.
           #
           def where_clause(column)
-            return nil unless apply?
             column = column.intern
             if list?
-              selected.reduce do |result, index|
-                sub_clause = where_sub_clause(column, index)
-                if sub_clause
-                  negated? ? (result & sub_clause) : (result | sub_clause)
-                else
-                  result # just pass current result on through...
-                end
+              selected.map do |index|
+                where_sub_clause(column, index)
+              end.compact.reduce do |clause_1, clause_2|
+                negated? ? (clause_1 & clause_2) : (clause_1 | clause_2)
               end
             else # single selection from set of values
               where_sub_clause(column, selected)
@@ -90,19 +127,9 @@ module Axis
             else
               new_selected = validate_selected_index(new_selected) rescue nil
             end
-            result   = new_selected = selected
-            selected = new_selected
+            result        = new_selected != selected
+            self.selected = new_selected
             result
-          end
-
-          #
-          # After a new state filter is created it might not have the best set
-          # of default values since it isn't aware of the associated attribute's
-          # settings. This is called when the state filter is first constructed
-          # and "wrapped" by the session filter to set up these context-aware
-          # defaults.
-          #
-          def initial_defaults
           end
 
           #

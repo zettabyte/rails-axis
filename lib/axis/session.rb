@@ -12,6 +12,9 @@ module Axis
     # Key for axis entry in main params hash.
     PARAMS = "axis".freeze
 
+    # Prefix for axis UI elements' class names
+    CLASS = "axis".freeze
+
     #
     # Initialize instance and perform our "before filter" logic...
     #
@@ -43,6 +46,27 @@ module Axis
     def attr_id(*keys)
       keys.flatten!
       result  = PARAMS.dup
+      result += "-#{keys.shift}" until keys.empty?
+      result
+    end
+
+    #
+    # Used to generate the class string, used in HTML elements (and referenced
+    # by CSS rules), for a given attribute. The attribute here is defined by a
+    # list of values that hierarchically define the attribute. This works
+    # similarly to the #attr_id method except a class instead of an id name is
+    # generated and class names don't bother taking into account specific the
+    # specific form/binding involved; they describe the category of UI control.
+    # If no keys are specified, then the main, core HTML class of all axis
+    # elements is returned.
+    #
+    # Examples:
+    #   axis.attr_class          => "axis"
+    #   axis.attr_class("panel") => "axis-panel"
+    #
+    def attr_class(*keys)
+      keys.flatten!
+      result  = CLASS.dup
       result += "-#{keys.shift}" until keys.empty?
       result
     end

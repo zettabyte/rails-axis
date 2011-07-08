@@ -17,8 +17,8 @@ module Axis
         # value that is used to define the last of a range of values that the
         # associated attribute must be within (sql BETWEEN clause) in order for
         # the filter to match.
-        attr_accessor       :last
-        alias_method :last? :last
+        attr_accessor        :last
+        alias_method :last?, :last
 
         # Returns whether or not (boolean) this filter should be applied.
         def apply?

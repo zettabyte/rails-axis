@@ -1,0 +1,76 @@
+<div id="<%= form.attr_id("pagination") %>">
+
+  <% if form.show_first? -%>
+    <span class="<%= form.attr_class("pagination", "first") %>">
+      <%= form.on_first? ? form.label_first : link_to_self(form.label_first, form.attr_hash("page", form.first_page)) %>
+    </span>
+  <% end -%>
+
+  <% if form.show_rewind? -%>
+    <span class="<%= form.attr_class("pagination", "rewind") %>">
+      <%= form.on_first? ? form.label_rewind : link_to_self(form.label_rewind, form.attr_hash("page", form.rewind_page)) %>
+    </span>
+  <% end -%>
+
+  <% if form.show_prev? -%>
+    <span class="<%= form.attr_class("pagination", "prev") %>">
+      <%= form.on_first? ? form.label_prev : link_to_self(form.label_prev, form.attr_hash("page", form.prev_page)) %>
+    </span>
+  <% end -%>
+
+  <% form.first_page_range.each do |page| -%>
+    <span class="<%= form.attr_class("pagination", "page") %>">
+      <%= link_to_self(page.to_s, form.attr_hash("page", page)) %>
+    </span>
+  <% end -%>
+
+  <% if form.show_left_ellipses? -%>
+    <span class="<%= form.attr_class("pagination", "ellipses") %>"><%= form.label_ellipses %></span>
+  <% end -%>
+
+  <% form.main_page_range.each do |page| -%>
+    <% if form.page == page %>
+      <span class="<%= form.attr_class("pagination", "page", "current") %>" id="<%= form.attr_id("pagination", "page") %>">
+        <%= page %>
+      </span>
+    <% else -%>
+      <span class="<%= form.attr_class("pagination", "page") %>">
+        <%= link_to_self(page.to_s, form.attr_hash("page", page)) %>
+      </span>
+    <% end -%>
+  <% end -%>
+
+  <% if form.show_right_ellipses? -%>
+    <span class="<%= form.attr_class("pagination", "ellipses") %>"><%= form.label_ellipses %></span>
+  <% end -%>
+
+  <% form.last_page_range.each do |page| -%>
+    <span class="<%= form.attr_class("pagination", "page") %>">
+      <%= link_to_self(page.to_s, form.attr_hash("page", page)) %>
+    </span>
+  <% end -%>
+
+  <% if form.show_next? -%>
+    <span class="<%= form.attr_class("pagination", "next") %>">
+      <%= form.on_last? ? form.label_next : link_to_self(form.label_next, form.attr_hash("page", form.next_page)) %>
+    </span>
+  <% end -%>
+
+  <% if form.show_forward? -%>
+    <span class="<%= form.attr_class("pagination", "forward") %>">
+      <%= form.on_last? ? form.label_forward : link_to_self(form.label_forward, form.attr_hash("page", form.forward_page)) %>
+    </span>
+  <% end -%>
+
+  <% if form.show_last? -%>
+    <span class="<%= form.attr_class("pagination", "last") %>">
+      <%= form.on_last? ? form.label_last : link_to_self(form.label_last, form.attr_hash("page", form.last_page)) %>
+    </span>
+  <% end -%>
+
+</div>
+
+<div id="<%= form.attr_id("pagination", "summary") %>">
+  Showing page <%= form.page %> of <%= form.pages %> (<%= form.per %> per page).
+  Record #<%= form.selected %> selected out of <%= form.page_total %> records on the page.
+</div>

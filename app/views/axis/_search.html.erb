@@ -35,7 +35,7 @@
           <td><%= link_to_self "delete", form.attr_hash("del", filter.id) %></td>
           <td><%= filter.id == 0 ? "" : "AND" %></td>
           <td><%= filter.display %></td>
-          <td><% if filter.not? -%>
+          <td><% if filter.negatable? -%>
             (<%= check_box_tag filter.attr_name("negate"), "1", filter.negated? %> doesn't)
             <% else %>&nbsp;<% end -%>
           </td>

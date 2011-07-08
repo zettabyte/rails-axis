@@ -1,9 +1,11 @@
 # encoding: utf-8
+require 'axis/validate'
+
 module Axis
   class Session
     class Form
       class Filter
-        class Default
+        class Default < Filter
 
           COMPARISONS = {
             :string   => %w{ equals begins ends    contains                       }.map { |s| s.freeze }.freeze,
@@ -49,6 +51,17 @@ module Axis
           }
 
           #
+          # After a new state filter is created it might not have the best set
+          # of default values since it isn't aware of the associated attribute's
+          # settings. This is called when the state filter is first constructed
+          # and "wrapped" by the session filter to set up these context-aware
+          # defaults.
+          #
+          def initialize_defaults!
+            # default state is all empty
+          end
+
+          #
           # Return an array (of two-element arrays) containing the appropriate
           # list of values and display names for a filter of type :default's
           # comparison-selection options.
@@ -57,7 +70,7 @@ module Axis
             result = COMPARISONS[attribute_type].map { |c| [LABELS[attribute_type][c], c] }
             result.unshift(["", ""]) if attribute_type == :boolean
             SPECIALS[:comparisons].each do |c|
-              result << [c, SPECIALS[:labels][c]] if self.send("include_#{c}?")
+              result << [SPECIALS[:labels][c], c] if self.send("include_#{c}?")
             end
             result
           end
@@ -98,7 +111,6 @@ module Axis
           # If the filter doesn't apply then just return nil.
           #
           def where_clause(column)
-            return nil unless apply?
             column = column.intern
             if SPECIALS[:comparisons].include?(comparison)
               column = column.not_eq if negated? # pre-apply negation
@@ -143,12 +155,12 @@ module Axis
             new_value      = changes[:value]
             result         = new_comparison != comparison
             if new_comparison.blank?
-              result     = apply? # a change occured if old filter "applied"
-              value      = nil
-              comparison = nil
+              result          = apply? # a change occured if old filter "applied"
+              self.value      = nil
+              self.comparison = nil
             elsif SPECIALS[:comparisons].include?(new_comparison)
-              comparison = new_comparison
-              value      = true # so that #apply? works; value ignored
+              self.comparison = new_comparison
+              self.value      = true # so that #apply? works; value ignored
             elsif COMPARISONS[attribute_type].include?(new_comparison)
               # convert new_value to correct data type
               new_value = case attribute_type
@@ -159,21 +171,11 @@ module Axis
                 tmp = Validate.temporal(new_value)
                 attribute.type == :date ? tmp.to_date : tmp
               end rescue nil
-              result   ||= new_value != value
-              comparison = new_comparison
-              value      = new_value
+              result        ||= new_value != value
+              self.comparison = new_comparison
+              self.value      = new_value
             end
             result
-          end
-
-          #
-          # After a new state filter is created it might not have the best set
-          # of default values since it isn't aware of the associated attribute's
-          # settings. This is called when the state filter is first constructed
-          # and "wrapped" by the session filter to set up these context-aware
-          # defaults.
-          #
-          def initial_defaults
           end
 
           #

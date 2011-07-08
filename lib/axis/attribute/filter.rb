@@ -53,8 +53,8 @@ module Axis
       def initialize(model, attribute_type, options = nil, &block)
         raise ArgumentError, "invalid type for options: #{options.class}" unless options.nil? or options.is_a?(Hash)
         options       ||= {}
-        display         = options[:display]
-        negatable       = options[:negatable]
+        display         = options.delete(:display)
+        negatable       = options.delete(:negatable)
         raise ArgumentError, "invalid type for display: #{display.class}" unless display.nil? or display.is_a?(String)
         @model          = Validate.model(model)
         @attribute_type = Attribute.validate_type(attribute_type)

@@ -4,34 +4,6 @@ module Axis
     class Filter
       class Set < Filter
 
-        # These are the names of the "special" values in the order they should
-        # be listed as options to the user (as/if they're available). These are
-        # available if #include_null?, #include_blank?, and/or #include_empty?
-        # yield true respectively.
-        #
-        # The real trick here is that these names are keys to the SPECIAL_*
-        # constants (below) and the string equivalent of these values, with the
-        # "include_" prefix and the "?" suffix matches the name of the query
-        # method used to determine if this special option is available on this
-        # filter.
-        SPECIALS = [ :null, :empty, :blank ].freeze
-
-        # The display labels for the special (null, blank, or empty) values that
-        # may be available (depending on #include_null?, etc).
-        SPECIAL_LABELS = {
-          :null  => "Unset".freeze,
-          :empty => "Empty".freeze,
-          :blank => "Blank".freeze
-        }.freeze
-
-        # The values associated with the special (null, blank, or empty) values
-        # that may be available (depending on #include_null?, etc).
-        SPECIAL_VALUES = {
-          :null  => -1,
-          :empty => -2,
-          :blank => -3
-        }.freeze
-
         # Creates a :set-type attribute filter instance associated with an
         # attribute of the specified attribute_type on the specified model.
         def initialize(model, attribute_type, options = nil, &block)
